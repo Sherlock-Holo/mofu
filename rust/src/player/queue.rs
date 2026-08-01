@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use rand::seq::SliceRandom;
+
 /// How the player chooses a track after the current one ends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackMode {
@@ -18,11 +20,15 @@ pub struct QueueSnapshot {
 }
 
 /// Owns queue navigation independently from decoding and output.
+///
+/// In [`PlaybackMode::Shuffle`], the path list is Fisher–Yates shuffled once
+/// (on queue replace or when switching into shuffle), then advanced sequentially.
 pub(crate) struct PlaybackQueue {
     paths: Vec<PathBuf>,
     current_index: Option<usize>,
     mode: PlaybackMode,
-    shuffle_state: u64,
+    /// After switching into shuffle mid-session, the next advance starts at index 0.
+    restart_from_start_on_next: bool,
 }
 
 impl PlaybackQueue {
@@ -31,7 +37,7 @@ impl PlaybackQueue {
             paths: Vec::new(),
             current_index: None,
             mode: PlaybackMode::Sequential,
-            shuffle_state: 0x9e37_79b9_7f4a_7c15,
+            restart_from_start_on_next: false,
         }
     }
 
@@ -41,7 +47,14 @@ impl PlaybackQueue {
         start_index: Option<usize>,
     ) -> Option<PathBuf> {
         self.paths = paths;
-        self.current_index = start_index.filter(|index| *index < self.paths.len());
+        self.restart_from_start_on_next = false;
+        if self.mode == PlaybackMode::Shuffle {
+            self.shuffle_paths();
+            // Shuffled order is the play order; always start from the front.
+            self.current_index = if self.paths.is_empty() { None } else { Some(0) };
+        } else {
+            self.current_index = start_index.filter(|index| *index < self.paths.len());
+        }
         self.current_path().cloned()
     }
 
@@ -49,12 +62,28 @@ impl PlaybackQueue {
         if index >= self.paths.len() {
             return None;
         }
+        self.restart_from_start_on_next = false;
         self.current_index = Some(index);
         self.current_path().cloned()
     }
 
     pub(crate) fn set_mode(&mut self, mode: PlaybackMode) {
+        let switching_to_shuffle =
+            mode == PlaybackMode::Shuffle && self.mode != PlaybackMode::Shuffle;
         self.mode = mode;
+        if !matches!(mode, PlaybackMode::Shuffle) {
+            self.restart_from_start_on_next = false;
+            return;
+        }
+        if !switching_to_shuffle || self.paths.is_empty() {
+            return;
+        }
+        let current_path = self.current_path().cloned();
+        self.shuffle_paths();
+        // Keep highlighting the still-playing file; next advance starts at 0.
+        self.current_index = current_path
+            .and_then(|path| self.paths.iter().position(|candidate| candidate == &path));
+        self.restart_from_start_on_next = true;
     }
 
     pub(crate) fn current_path(&self) -> Option<&PathBuf> {
@@ -64,14 +93,14 @@ impl PlaybackQueue {
     pub(crate) fn next(&mut self, ended: bool) -> Option<PathBuf> {
         if self.paths.is_empty() {
             self.current_index = None;
+            self.restart_from_start_on_next = false;
             return None;
         }
         let current = self.current_index.unwrap_or(0).min(self.paths.len() - 1);
         let next = match self.mode {
             PlaybackMode::RepeatOne if ended => current,
-            PlaybackMode::Shuffle => self.next_shuffle_index(current),
             PlaybackMode::RepeatAll => (current + 1) % self.paths.len(),
-            PlaybackMode::Sequential | PlaybackMode::RepeatOne => {
+            PlaybackMode::Sequential | PlaybackMode::RepeatOne | PlaybackMode::Shuffle => {
                 if current + 1 >= self.paths.len() {
                     return None;
                 }
@@ -85,11 +114,12 @@ impl PlaybackQueue {
     pub(crate) fn previous(&mut self) -> Option<PathBuf> {
         if self.paths.is_empty() {
             self.current_index = None;
+            self.restart_from_start_on_next = false;
             return None;
         }
+        self.restart_from_start_on_next = false;
         let current = self.current_index.unwrap_or(0).min(self.paths.len() - 1);
         let previous = match self.mode {
-            PlaybackMode::Shuffle => self.next_shuffle_index(current),
             PlaybackMode::RepeatAll if current == 0 => self.paths.len() - 1,
             _ if current == 0 => return None,
             _ => current - 1,
@@ -106,19 +136,8 @@ impl PlaybackQueue {
         }
     }
 
-    fn next_shuffle_index(&mut self, current: usize) -> usize {
-        if self.paths.len() <= 1 {
-            return 0;
-        }
-        self.shuffle_state ^= self.shuffle_state << 13;
-        self.shuffle_state ^= self.shuffle_state >> 7;
-        self.shuffle_state ^= self.shuffle_state << 17;
-        let candidate = self.shuffle_state as usize % (self.paths.len() - 1);
-        if candidate >= current {
-            candidate + 1
-        } else {
-            candidate
-        }
+    fn shuffle_paths(&mut self) {
+        self.paths.shuffle(&mut rand::rng());
     }
 }
 
@@ -162,12 +181,44 @@ mod tests {
     }
 
     #[test]
-    fn shuffle_does_not_repeat_current_when_possible() {
-        let mut queue = queue(PlaybackMode::Shuffle);
-        for _ in 0..20 {
-            let before = queue.snapshot().current_index;
-            queue.next(true);
-            assert_ne!(queue.snapshot().current_index, before);
-        }
+    fn replace_in_shuffle_starts_at_front() {
+        let mut queue = PlaybackQueue::new();
+        queue.set_mode(PlaybackMode::Shuffle);
+        let selected = queue.replace(vec!["a".into(), "b".into(), "c".into()], Some(2));
+        let snapshot = queue.snapshot();
+        assert_eq!(snapshot.current_index, Some(0));
+        assert_eq!(selected.as_ref(), snapshot.paths.first());
+        // After shuffle, sequential next walks the (possibly reordered) list.
+        let second = snapshot.paths[1].clone();
+        assert_eq!(queue.next(false), Some(second));
+    }
+
+    #[test]
+    fn switching_to_shuffle_starts_next_from_front() {
+        let mut queue = PlaybackQueue::new();
+        queue.replace(vec!["a".into(), "b".into(), "c".into()], Some(1));
+        assert_eq!(queue.current_path(), Some(&PathBuf::from("b")));
+
+        queue.set_mode(PlaybackMode::Shuffle);
+        let snapshot = queue.snapshot();
+        assert_eq!(snapshot.mode, PlaybackMode::Shuffle);
+        assert_eq!(snapshot.paths.len(), 3);
+        // Still pointing at the playing path after reorder.
+        assert_eq!(queue.current_path(), Some(&PathBuf::from("b")));
+
+        let first = snapshot.paths[0].clone();
+        assert_eq!(queue.next(false), Some(first));
+        assert_eq!(queue.snapshot().current_index, Some(0));
+    }
+
+    #[test]
+    fn shuffle_advances_sequentially_after_start() {
+        let mut queue = PlaybackQueue::new();
+        queue.set_mode(PlaybackMode::Shuffle);
+        queue.replace(vec!["a".into(), "b".into(), "c".into()], Some(0));
+        let paths = queue.snapshot().paths.clone();
+        assert_eq!(queue.next(false), Some(paths[1].clone()));
+        assert_eq!(queue.next(false), Some(paths[2].clone()));
+        assert_eq!(queue.next(true), None);
     }
 }

@@ -348,26 +348,9 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
-  /// 播放列表全部曲目；起播位置按当前播放模式选择（随机模式随机一首，其余从第一首）。
+  /// 播放列表全部曲目。随机模式下 Rust 会先打乱队列再从第一首顺序播放。
   void playAll(List<String> paths) {
-    if (paths.isEmpty) {
-      return;
-    }
-    final startIndex = switch (playbackMode) {
-      PlaybackMode.shuffle => _randomIndex(paths.length),
-      PlaybackMode.sequential ||
-      PlaybackMode.repeatOne ||
-      PlaybackMode.repeatAll =>
-        0,
-    };
-    playPaths(paths, startIndex: startIndex);
-  }
-
-  int _randomIndex(int length) {
-    if (length <= 1) {
-      return 0;
-    }
-    return DateTime.now().microsecondsSinceEpoch.abs() % length;
+    playPaths(paths, startIndex: 0);
   }
 
   void _stepQueue(int delta) {
