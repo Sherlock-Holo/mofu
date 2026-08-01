@@ -5,12 +5,26 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:mofu/src/rust/api/library.dart' show PlaybackSession;
 import 'package:mofu/src/rust/api/player.dart';
 
+class _PendingQueue {
+  const _PendingQueue({
+    required this.paths,
+    required this.startIndex,
+    required this.autoplay,
+    this.playlistId,
+  });
+
+  final List<String> paths;
+  final BigInt? startIndex;
+  final bool autoplay;
+  final BigInt? playlistId;
+}
+
 /// 轮询 Rust [Player] 快照并转发播放控制。
 class PlayerController extends ChangeNotifier {
   PlayerController({
     Player? player,
     Duration pollInterval = const Duration(milliseconds: 120),
-  })  : _player = player ?? Player(),
+  })  : _player = player,
         _pollInterval = pollInterval,
         _ownsPlayer = true,
         _fake = false;
@@ -24,12 +38,19 @@ class PlayerController extends ChangeNotifier {
         _pollInterval = pollInterval,
         _ownsPlayer = false,
         _fake = true,
-        _snapshot = snapshot ?? idleSnapshot();
+        _snapshot = snapshot ?? idleSnapshot(),
+        _ready = Future<void>.value();
 
-  final Player? _player;
+  Player? _player;
   final Duration _pollInterval;
   final bool _ownsPlayer;
   final bool _fake;
+
+  Future<void>? _ready;
+  _PendingQueue? _pendingQueue;
+
+  /// Controls queued while [_player] is still null (seek / mode / volume / play…).
+  List<void Function()>? _pendingOps;
 
   /// 用户切换播放模式时异步写库；启动恢复时不要挂副作用。
   Future<void> Function(PlaybackMode mode)? persistPlaybackMode;
@@ -94,8 +115,41 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
+  /// 确保底层 [Player] 已创建并开始轮询；并发调用共用同一 Future。
+  Future<void> ensureReady() {
+    if (_fake || _disposed) {
+      return Future<void>.value();
+    }
+    final existing = _ready;
+    if (existing != null) {
+      return existing;
+    }
+    final future = Future<void>(() async {
+      try {
+        if (_disposed) {
+          return;
+        }
+        _player ??= Player();
+        start();
+        _flushPending();
+      } catch (err) {
+        // 允许后续再次 ensureReady；勿把失败 Future 永久钉住。
+        _ready = null;
+        _error = err.toString();
+        notifyListeners();
+        rethrow;
+      }
+    });
+    _ready = future;
+    return future;
+  }
+
   void start() {
     if (_fake) {
+      return;
+    }
+    if (_player == null) {
+      unawaited(ensureReady());
       return;
     }
     _pollTimer?.cancel();
@@ -117,9 +171,13 @@ class PlayerController extends ChangeNotifier {
     if (_disposed || _fake) {
       return;
     }
+    final player = _player;
+    if (player == null) {
+      return;
+    }
     try {
       final previous = _snapshot;
-      final next = _player!.snapshot();
+      final next = player.snapshot();
       final changed = previous != next;
       _snapshot = next;
       _observeSessionTriggers(previous);
@@ -181,6 +239,11 @@ class PlayerController extends ChangeNotifier {
       }
       return;
     }
+    if (_player == null) {
+      (_pendingOps ??= []).add(action);
+      unawaited(ensureReady());
+      return;
+    }
     try {
       action();
       _error = null;
@@ -189,6 +252,37 @@ class PlayerController extends ChangeNotifier {
       _error = err.toString();
       notifyListeners();
     }
+  }
+
+  /// Ready 后先落 setQueue，再按序回放其它 pending 控制。
+  void _flushPending() {
+    _flushPendingQueue();
+    final ops = _pendingOps;
+    _pendingOps = null;
+    if (ops == null || _player == null) {
+      return;
+    }
+    for (final op in ops) {
+      _run(op);
+    }
+  }
+
+  void _flushPendingQueue() {
+    final pending = _pendingQueue;
+    _pendingQueue = null;
+    if (pending == null || _player == null) {
+      return;
+    }
+    if (pending.playlistId != null) {
+      sourcePlaylistId = pending.playlistId;
+    }
+    _run(() {
+      _player!.setQueue(
+        paths: pending.paths,
+        startIndex: pending.startIndex,
+        autoplay: pending.autoplay,
+      );
+    });
   }
 
   void play() => _run(() {
@@ -411,6 +505,16 @@ class PlayerController extends ChangeNotifier {
     if (playlistId != null) {
       sourcePlaylistId = playlistId;
     }
+    if (!_fake && _player == null) {
+      _pendingQueue = _PendingQueue(
+        paths: List<String>.from(paths),
+        startIndex: startIndex,
+        autoplay: autoplay,
+        playlistId: playlistId,
+      );
+      unawaited(ensureReady());
+      return;
+    }
     _run(() {
       if (_fake) {
         final queue = <QueueItem>[
@@ -518,6 +622,8 @@ class PlayerController extends ChangeNotifier {
     _pollTimer?.cancel();
     _volumePersistTimer?.cancel();
     _volumePersistTimer = null;
+    _pendingQueue = null;
+    _pendingOps = null;
     if (_ownsPlayer) {
       _player?.dispose();
     }

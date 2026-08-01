@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mofu/src/rust/api/library.dart';
-import 'package:mofu/src/rust/api/player.dart' show PlaybackMode;
+import 'package:mofu/src/rust/api/player.dart'
+    show CoverArt, PlaybackMode, TrackMetadata;
 
 /// 曲库列表状态与目录/文件导入动作。
 class LibraryController extends ChangeNotifier {
@@ -72,6 +75,9 @@ class LibraryController extends ChangeNotifier {
     return _library ??= await Library.newInstance();
   }
 
+  /// 单次 FFI 封面批量上限，避免巨大同步 payload。
+  static const int _coverHydrateChunkSize = 32;
+
   Future<void> load() async {
     if (_fake) {
       _loading = false;
@@ -93,6 +99,85 @@ class LibraryController extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }
+    if (_error == null) {
+      unawaited(hydrateCovers());
+    }
+  }
+
+  /// 在 lite 歌单已展示后，按 path 分块补封面。
+  Future<void> hydrateCovers() async {
+    if (_fake || _playlists.isEmpty) {
+      return;
+    }
+    final paths = <String>[
+      for (final playlist in _playlists)
+        for (final song in playlist.songs)
+          if (song.metadata.cover == null) song.path,
+    ];
+    if (paths.isEmpty) {
+      return;
+    }
+    try {
+      final library = await _requireLibrary();
+      final byPath = <String, CoverArt>{};
+      for (var i = 0; i < paths.length; i += _coverHydrateChunkSize) {
+        final end = (i + _coverHydrateChunkSize).clamp(0, paths.length);
+        final chunk = paths.sublist(i, end);
+        final covers = await library.coversForPaths(paths: chunk);
+        for (final item in covers) {
+          byPath[item.path] = item.cover;
+        }
+      }
+      if (byPath.isEmpty) {
+        return;
+      }
+      _playlists = [
+        for (final playlist in _playlists)
+          Playlist(
+            id: playlist.id,
+            name: playlist.name,
+            kind: playlist.kind,
+            directoryPath: playlist.directoryPath,
+            songs: [
+              for (final song in playlist.songs)
+                _songWithCover(song, byPath[song.path]),
+            ],
+          ),
+      ];
+      notifyListeners();
+    } catch (_) {
+      // 封面补全失败不影响列表文字；保留 placeholder。
+    }
+  }
+
+  Song _songWithCover(Song song, CoverArt? cover) {
+    if (cover == null) {
+      return song;
+    }
+    final meta = song.metadata;
+    return Song(
+      path: song.path,
+      durationMs: song.durationMs,
+      metadata: TrackMetadata(
+        title: meta.title,
+        artist: meta.artist,
+        album: meta.album,
+        albumArtist: meta.albumArtist,
+        composer: meta.composer,
+        lyricist: meta.lyricist,
+        performer: meta.performer,
+        genre: meta.genre,
+        comment: meta.comment,
+        date: meta.date,
+        year: meta.year,
+        trackNumber: meta.trackNumber,
+        trackTotal: meta.trackTotal,
+        discNumber: meta.discNumber,
+        discTotal: meta.discTotal,
+        cover: cover,
+        lyrics: meta.lyrics,
+      ),
+    );
   }
 
   /// 读取持久化的播放模式；缺省为顺序播放。
@@ -191,6 +276,9 @@ class LibraryController extends ChangeNotifier {
     } finally {
       _loading = false;
       notifyListeners();
+    }
+    if (!_fake && _error == null) {
+      unawaited(hydrateCovers());
     }
   }
 

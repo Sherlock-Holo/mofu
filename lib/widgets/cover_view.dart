@@ -39,6 +39,8 @@ class CoverView extends StatelessWidget {
           circular ? size / 2 : StrawberryCream.radiusSm,
         );
     final image = _bytes;
+    final cachePx =
+        (size * MediaQuery.devicePixelRatioOf(context)).round().clamp(1, 4096);
 
     Widget child;
     if (image != null) {
@@ -47,6 +49,8 @@ class CoverView extends StatelessWidget {
         width: size,
         height: size,
         fit: fit,
+        cacheWidth: cachePx,
+        cacheHeight: cachePx,
         gaplessPlayback: true,
         errorBuilder: (_, __, ___) => _placeholder(size),
       );
@@ -101,6 +105,11 @@ class BlurCoverBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final bytes = cover?.data;
     final hasCover = bytes != null && bytes.isNotEmpty;
+    // 按可视区域 × scale × DPR 解码；模糊背景不需要原图像素。
+    final mediaSize = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth = (mediaSize.width * scale * dpr).round().clamp(1, 4096);
+    final cacheHeight = (mediaSize.height * scale * dpr).round().clamp(1, 4096);
 
     return Stack(
       fit: StackFit.expand,
@@ -117,6 +126,8 @@ class BlurCoverBackground extends StatelessWidget {
               child: Image.memory(
                 bytes,
                 fit: BoxFit.cover,
+                cacheWidth: cacheWidth,
+                cacheHeight: cacheHeight,
                 gaplessPlayback: true,
                 errorBuilder: (_, __, ___) => const ColoredBox(
                   color: StrawberryCream.creamDeep,

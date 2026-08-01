@@ -7,6 +7,8 @@ import 'package:mofu/library/library_controller.dart';
 import 'package:mofu/player/player_controller.dart';
 import 'package:mofu/src/rust/api/library.dart';
 import 'package:mofu/src/rust/api/player.dart' show PlaybackMode;
+import 'package:mofu/src/rust/api/setup.dart';
+import 'package:mofu/src/rust/frb_generated.dart';
 import 'package:provider/provider.dart';
 
 /// Mofu播放器根应用：注入控制器、主题与路由。
@@ -43,24 +45,41 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     _player.persistVolume = _library.persistVolume;
     _player.persistPlaybackSession = _library.persistPlaybackSession;
     _player.clearPlaybackSession = _library.clearPlaybackSession;
-    _player.start();
     unawaited(_bootstrap());
   }
 
   Future<void> _bootstrap() async {
+    // 生产路径自建 controller，需要先加载 FRB；测试注入 fake 时跳过。
+    if (_ownsLibrary || _ownsPlayer) {
+      await RustLib.init();
+      setup();
+    }
+    if (!mounted) {
+      return;
+    }
+
+    final playerReady = _player.ensureReady();
     await _library.load();
     if (!mounted) {
       return;
     }
 
+    await playerReady;
+    if (!mounted) {
+      return;
+    }
+
+    // 先顺序读完 meta（音量/模式/会话），再异步补封面。
+    // 连接池已支持并发库操作；此处顺序加载仍作防御性编排，避免启动路径竞态。
     try {
       final volume = await _library.loadVolume();
       if (!mounted) {
         return;
       }
       _player.setVolume(volume, persist: false);
-    } catch (_) {
+    } catch (err, stack) {
       // 音量恢复失败时保持默认。
+      debugPrint('bootstrap: loadVolume failed: $err\n$stack');
     }
 
     try {
@@ -69,19 +88,24 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
         return;
       }
       _player.setPlaybackMode(mode, persist: false);
-    } catch (_) {
+    } catch (err, stack) {
       // 曲库已加载；模式恢复失败时保持默认顺序播放。
+      debugPrint('bootstrap: loadPlaybackMode failed: $err\n$stack');
     }
 
     try {
       final session = await _library.loadPlaybackSession();
       if (!mounted || session == null) {
+        unawaited(_library.hydrateCovers());
         return;
       }
       await _restoreSession(session);
-    } catch (_) {
+    } catch (err, stack) {
       // 会话恢复失败时保持空闲，不打断启动。
+      debugPrint('bootstrap: loadPlaybackSession failed: $err\n$stack');
     }
+
+    unawaited(_library.hydrateCovers());
   }
 
   Future<void> _restoreSession(PlaybackSession session) async {

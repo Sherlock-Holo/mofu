@@ -1,16 +1,14 @@
 mod catalog;
-mod lyrics;
 mod migrate_json;
 mod reconnect;
 
 pub(crate) use catalog::CatalogStore;
-pub(crate) use lyrics::LyricsStore;
 pub(crate) use migrate_json::JsonMigrator;
 
 use super::cover_store::CoverStore;
 use super::error::LibraryError;
 use super::model::{CoverExt, PlaylistId, PlaylistKind, PlaylistRow, SongId, SongTags};
-use crate::player::metadata::{CoverArt, Lyrics};
+use crate::player::metadata::CoverArt;
 
 /// Catalog operations needed by library orchestration and JSON migration.
 pub(crate) trait CatalogStoreApi {
@@ -87,33 +85,6 @@ impl CatalogStoreApi for CatalogStore {
         song_ids: &[SongId],
     ) -> Result<(), LibraryError> {
         CatalogStore::replace_playlist_songs(self, playlist_id, song_ids).await
-    }
-}
-
-/// Lyrics store operations needed by library orchestration and JSON migration.
-pub(crate) trait LyricsStoreApi {
-    fn replace_for_song(
-        &self,
-        song_id: SongId,
-        lyrics: &[Lyrics],
-    ) -> impl Future<Output = Result<(), LibraryError>> + Send;
-    fn delete_for_songs(
-        &self,
-        song_ids: &[SongId],
-    ) -> impl Future<Output = Result<(), LibraryError>> + Send;
-}
-
-impl LyricsStoreApi for LyricsStore {
-    async fn replace_for_song(
-        &self,
-        song_id: SongId,
-        lyrics: &[Lyrics],
-    ) -> Result<(), LibraryError> {
-        LyricsStore::replace_for_song(self, song_id, lyrics).await
-    }
-
-    async fn delete_for_songs(&self, song_ids: &[SongId]) -> Result<(), LibraryError> {
-        LyricsStore::delete_for_songs(self, song_ids).await
     }
 }
 

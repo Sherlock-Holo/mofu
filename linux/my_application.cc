@@ -48,14 +48,28 @@ static void my_application_activate(GApplication* application) {
   }
 
   gtk_window_set_default_size(window, 1280, 720);
-  gtk_widget_show(GTK_WIDGET(window));
+
+  // GTK chrome (title/header) only — FlView's GL surface ignores CSS.
+  g_autoptr(GtkCssProvider) css_provider = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(
+      css_provider, "window { background-color: #FFF7F2; }", -1, nullptr);
+  gtk_style_context_add_provider(
+      gtk_widget_get_style_context(GTK_WIDGET(window)),
+      GTK_STYLE_PROVIDER(css_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  // Engine clear color defaults to black and covers GTK CSS; match StrawberryCream.cream.
+  GdkRGBA background_color;
+  gdk_rgba_parse(&background_color, "#FFF7F2");
+  fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+
+  // Show early with cream clear color so a slow first frame is not a black void.
+  gtk_widget_show(GTK_WIDGET(window));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 

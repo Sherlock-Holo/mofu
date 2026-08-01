@@ -9,13 +9,34 @@ import 'package:mofu/widgets/duration_format.dart';
 import 'package:provider/provider.dart';
 
 /// 可滚动表格化歌曲列表。
-class SongTable extends StatelessWidget {
+class SongTable extends StatefulWidget {
   const SongTable({super.key});
+
+  @override
+  State<SongTable> createState() => _SongTableState();
+}
+
+class _SongTableState extends State<SongTable> {
+  List<Song>? _cachedSongs;
+  List<String> _cachedPaths = const [];
+
+  List<String> _pathsOf(List<Song> songs) {
+    if (identical(_cachedSongs, songs)) {
+      return _cachedPaths;
+    }
+    _cachedSongs = songs;
+    _cachedPaths = [for (final song in songs) song.path];
+    return _cachedPaths;
+  }
 
   @override
   Widget build(BuildContext context) {
     final library = context.watch<LibraryController>();
-    final player = context.watch<PlayerController>();
+    // 只订阅高亮相关字段；进度 tick 不应整表重建。
+    final playingPath = context.select<PlayerController, String?>(
+      (player) => player.currentPath,
+    );
+    final player = context.read<PlayerController>();
     final playlist = library.selectedPlaylist;
     final songs = playlist?.songs ?? const <Song>[];
 
@@ -64,8 +85,7 @@ class SongTable extends StatelessWidget {
       );
     }
 
-    final paths = songs.map((song) => song.path).toList();
-    final playingPath = _currentPath(player);
+    final paths = _pathsOf(songs);
 
     return Column(
       children: [
@@ -104,19 +124,6 @@ class SongTable extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String? _currentPath(PlayerController player) {
-    final index = player.currentIndex;
-    if (index == null) {
-      return null;
-    }
-    for (final item in player.queue) {
-      if (item.index == index) {
-        return item.path;
-      }
-    }
-    return null;
   }
 }
 
@@ -187,10 +194,13 @@ class _SongRow extends StatelessWidget {
               SizedBox(
                 width: 36,
                 child: playing
-                    ? const Icon(
-                        Icons.graphic_eq_rounded,
-                        size: 18,
-                        color: StrawberryCream.strawberry,
+                    ? const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Icon(
+                          Icons.graphic_eq_rounded,
+                          size: 18,
+                          color: StrawberryCream.strawberry,
+                        ),
                       )
                     : Text(
                         '${index + 1}',

@@ -16,7 +16,8 @@ class CurrentTrackHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final library = context.watch<LibraryController>();
-    final player = context.watch<PlayerController>();
+    // 仅需调用 playAll，不订阅播放进度等无关状态。
+    final player = context.read<PlayerController>();
     final playlist = library.selectedPlaylist;
 
     if (library.playlists.isEmpty) {

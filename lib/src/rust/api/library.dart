@@ -9,7 +9,7 @@ import '../frb_generated.dart';
 import 'player.dart';
 
 // These functions are ignored because they are not marked as `pub`: `ffi_playback_mode`, `map_err`, `stored_playback_mode`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Library>>
 abstract class Library implements RustOpaqueInterface {
@@ -21,6 +21,9 @@ abstract class Library implements RustOpaqueInterface {
 
   /// Clear any persisted playback session.
   Future<void> clearPlaybackSession();
+
+  /// Load cover art for the given song paths; unknown / cover-less paths are skipped.
+  Future<List<SongCover>> coversForPaths({required List<String> paths});
 
   /// Create an empty user-managed playlist.
   Future<Playlist> createVirtual({required String name});
@@ -55,6 +58,9 @@ abstract class Library implements RustOpaqueInterface {
   Future<PlaybackSession?> playbackSession();
 
   /// Return every directory and virtual playlist.
+  ///
+  /// Song rows omit cover bytes and lyrics so the first paint stays light; use
+  /// [`Self::covers_for_paths`] to hydrate artwork afterward.
   Future<List<Playlist>> playlists();
 
   /// Rescan a directory playlist or drop invalid virtual-list paths.
@@ -167,4 +173,26 @@ class Song {
           path == other.path &&
           durationMs == other.durationMs &&
           metadata == other.metadata;
+}
+
+/// Cover art for a single library path (async hydrate after lite playlists).
+class SongCover {
+  final String path;
+  final CoverArt cover;
+
+  const SongCover({
+    required this.path,
+    required this.cover,
+  });
+
+  @override
+  int get hashCode => path.hashCode ^ cover.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SongCover &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          cover == other.cover;
 }

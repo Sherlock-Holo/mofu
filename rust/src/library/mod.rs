@@ -17,19 +17,20 @@ pub(crate) use model::StoredPlaybackMode;
 pub use model::{PlaybackSession, Playlist, PlaylistId, PlaylistKind, Song};
 use model::{SongId, SongRow, SongTags};
 use scan::LibraryScanner;
-use store::{CatalogStore, JsonMigrator, LyricsStore};
+use store::{CatalogStore, JsonMigrator};
 
-use crate::player::metadata::TrackMetadata;
+use crate::player::metadata::{CoverArt, TrackMetadata};
 use crate::player::{MediaInspector, SymphoniaMediaInspector};
 
 const CATALOG_FILE_NAME: &str = "catalog.db";
-const LYRICS_FILE_NAME: &str = "lyrics.db";
 const COVERS_DIR_NAME: &str = "covers";
 
-/// Persistent library service backed by Turso databases and a cover cache.
+/// Persistent library service backed by Turso catalog + cover cache.
+///
+/// Lyrics are not stored in the library DB; playback loads them from the media
+/// file / sidecar at decode time. Any leftover `lyrics.db` on disk is unused.
 pub(crate) struct Library {
     catalog: CatalogStore,
-    lyrics: LyricsStore,
     covers: CoverStore,
     inspector: Box<dyn MediaInspector>,
 }
@@ -69,12 +70,10 @@ impl Library {
     ) -> Result<Self, LibraryError> {
         fs::create_dir_all(&data_dir)?;
         let catalog = CatalogStore::open(&data_dir.join(CATALOG_FILE_NAME)).await?;
-        let lyrics = LyricsStore::open(&data_dir.join(LYRICS_FILE_NAME)).await?;
         let covers = CoverStore::open(cache_dir)?;
-        JsonMigrator::run(&data_dir, &catalog, &lyrics, &covers).await?;
+        JsonMigrator::run(&data_dir, &catalog, &covers).await?;
         Ok(Self {
             catalog,
-            lyrics,
             covers,
             inspector,
         })
@@ -273,6 +272,28 @@ impl Library {
         })
     }
 
+    /// Load cover bytes for known paths; skips missing songs / missing cover files.
+    pub(crate) async fn covers_for_paths(
+        &self,
+        paths: Vec<String>,
+    ) -> Result<Vec<(String, CoverArt)>, LibraryError> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = self.catalog.song_rows_for_paths(&paths).await?;
+        let mut covers = Vec::new();
+        for row in rows {
+            let Some(ext) = row.tags.cover_ext else {
+                continue;
+            };
+            let Some(cover) = self.covers.read(row.id, ext, row.tags.cover_mime) else {
+                continue;
+            };
+            covers.push((row.path, cover));
+        }
+        Ok(covers)
+    }
+
     async fn load_songs_for_playlist(
         &self,
         playlist_id: PlaylistId,
@@ -280,18 +301,14 @@ impl Library {
         let rows = self.catalog.songs_for_playlist(playlist_id).await?;
         let mut songs = Vec::with_capacity(rows.len());
         for row in rows {
-            songs.push(self.assemble_song(row).await?);
+            // 首包只带文字标签；封面经 covers_for_paths 异步补全，歌词由播放路径提供。
+            songs.push(Self::assemble_song_lite(row));
         }
         Ok(songs)
     }
 
-    async fn assemble_song(&self, row: SongRow) -> Result<Song, LibraryError> {
-        let cover = match (row.tags.cover_ext, row.tags.cover_mime.clone()) {
-            (Some(ext), mime) => self.covers.read(row.id, ext, mime),
-            _ => None,
-        };
-        let lyrics = self.lyrics.load_for_song(row.id).await?;
-        Ok(Song {
+    fn assemble_song_lite(row: SongRow) -> Song {
+        Song {
             path: row.path,
             duration_ms: row.duration_ms,
             metadata: TrackMetadata {
@@ -310,10 +327,10 @@ impl Library {
                 track_total: row.tags.track_total,
                 disc_number: row.tags.disc_number,
                 disc_total: row.tags.disc_total,
-                cover,
-                lyrics,
+                cover: None,
+                lyrics: Vec::new(),
             },
-        })
+        }
     }
 
     async fn persist_songs(&self, songs: &[Song]) -> Result<Vec<SongId>, LibraryError> {
@@ -337,23 +354,13 @@ impl Library {
             None
         };
         let tags = SongTags::from_metadata(&song.metadata, cover_ext);
-        let song_id = self
-            .catalog
+        self.catalog
             .upsert_song(&song.path, song.duration_ms, &tags)
-            .await?;
-        self.lyrics
-            .replace_for_song(song_id, &song.metadata.lyrics)
-            .await?;
-        Ok(song_id)
+            .await
     }
 
     async fn garbage_collect(&self) -> Result<(), LibraryError> {
         let orphans = self.catalog.garbage_collect_orphan_songs().await?;
-        if orphans.is_empty() {
-            return Ok(());
-        }
-        let ids = orphans.iter().map(|(id, _)| *id).collect::<Vec<_>>();
-        self.lyrics.delete_for_songs(&ids).await?;
         for (song_id, cover_ext) in orphans {
             if let Some(ext) = cover_ext {
                 self.covers.remove(song_id, ext);
@@ -573,7 +580,14 @@ mod tests {
                 playlists[0].songs[0].metadata.title.as_deref(),
                 Some("Legacy Song")
             );
-            assert!(playlists[0].songs[0].metadata.cover.is_some());
+            assert!(playlists[0].songs[0].metadata.cover.is_none());
+            let covers = library
+                .covers_for_paths(vec!["/tmp/legacy.mp3".into()])
+                .await
+                .expect("covers");
+            assert_eq!(covers.len(), 1);
+            assert_eq!(covers[0].0, "/tmp/legacy.mp3");
+            assert_eq!(covers[0].1.data, vec![1, 2, 3, 4]);
             assert!(!dirs.data.join("library.json").exists());
             assert!(dirs.data.join("library.json.migrated").exists());
         });
@@ -703,6 +717,53 @@ mod tests {
                 reopened.playback_mode().await.expect("repeat one"),
                 StoredPlaybackMode::RepeatOne
             );
+        });
+    }
+
+    #[test]
+    fn concurrent_meta_reads_do_not_fail() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let library = open_test_library(&dirs).await;
+            library
+                .set_playback_mode(StoredPlaybackMode::RepeatAll)
+                .await
+                .expect("set");
+            let (mode, volume, session) = futures_util::join!(
+                library.playback_mode(),
+                library.volume(),
+                library.playback_session(),
+            );
+            assert_eq!(mode.expect("mode"), StoredPlaybackMode::RepeatAll);
+            assert_eq!(volume.expect("volume"), 1.0);
+            assert!(session.expect("session").is_none());
+        });
+    }
+
+    #[test]
+    fn concurrent_meta_read_and_write_do_not_fail() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let library = open_test_library(&dirs).await;
+            library.set_volume(0.25).await.expect("seed volume");
+            let (set_mode, volume, set_volume) = futures_util::join!(
+                library.set_playback_mode(StoredPlaybackMode::RepeatOne),
+                library.volume(),
+                library.set_volume(0.75),
+            );
+            set_mode.expect("set mode");
+            let mid_volume = volume.expect("volume");
+            assert!(
+                (mid_volume - 0.25).abs() < f64::EPSILON
+                    || (mid_volume - 0.75).abs() < f64::EPSILON,
+                "concurrent volume read saw unexpected value {mid_volume}"
+            );
+            set_volume.expect("set volume");
+            assert_eq!(
+                library.playback_mode().await.expect("mode"),
+                StoredPlaybackMode::RepeatOne
+            );
+            assert!((library.volume().await.expect("final volume") - 0.75).abs() < f64::EPSILON);
         });
     }
 

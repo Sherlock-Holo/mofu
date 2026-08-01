@@ -7,7 +7,7 @@ use tracing::info;
 
 use super::super::error::LibraryError;
 use super::super::model::{LibraryManifest, SongTags};
-use super::{CatalogStoreApi, CoverStoreApi, LyricsStoreApi};
+use super::{CatalogStoreApi, CoverStoreApi};
 
 const MANIFEST_FILE_NAME: &str = "library.json";
 const MIGRATED_FILE_NAME: &str = "library.json.migrated";
@@ -21,10 +21,12 @@ impl JsonMigrator {
     /// Presence of `library.json` means migration is not finished (including after a
     /// partial import that left catalog rows behind). Wipe any existing catalog
     /// content, re-import, then rename the manifest to mark completion.
+    ///
+    /// Lyrics from the JSON are not persisted: playback loads them from the
+    /// media file / sidecar at decode time.
     pub(crate) async fn run(
         data_dir: &Path,
         catalog: &impl CatalogStoreApi,
-        lyrics: &impl LyricsStoreApi,
         covers: &impl CoverStoreApi,
     ) -> Result<(), LibraryError> {
         let manifest_path = data_dir.join(MANIFEST_FILE_NAME);
@@ -32,7 +34,7 @@ impl JsonMigrator {
             return Ok(());
         }
 
-        Self::wipe_partial_state(catalog, lyrics, covers).await?;
+        Self::wipe_partial_state(catalog, covers).await?;
 
         let manifest: LibraryManifest = serde_json::from_slice(&fs::read(&manifest_path)?)?;
         info!(
@@ -58,9 +60,6 @@ impl JsonMigrator {
                         .upsert_song(&song.path, song.duration_ms, &tags)
                         .await?;
                 }
-                lyrics
-                    .replace_for_song(song_id, &song.metadata.lyrics)
-                    .await?;
                 song_ids.push(song_id);
             }
             catalog
@@ -73,10 +72,9 @@ impl JsonMigrator {
         Ok(())
     }
 
-    /// Clear playlists then orphan songs/lyrics/covers left by a failed prior attempt.
+    /// Clear playlists then orphan songs/covers left by a failed prior attempt.
     async fn wipe_partial_state(
         catalog: &impl CatalogStoreApi,
-        lyrics: &impl LyricsStoreApi,
         covers: &impl CoverStoreApi,
     ) -> Result<(), LibraryError> {
         if catalog.playlist_count().await? > 0 {
@@ -87,11 +85,6 @@ impl JsonMigrator {
         }
         // Always GC: a partial import may leave songs with no playlist rows.
         let orphans = catalog.garbage_collect_orphan_songs().await?;
-        if orphans.is_empty() {
-            return Ok(());
-        }
-        let ids = orphans.iter().map(|(id, _)| *id).collect::<Vec<_>>();
-        lyrics.delete_for_songs(&ids).await?;
         for (song_id, cover_ext) in orphans {
             if let Some(ext) = cover_ext {
                 covers.remove(song_id, ext);

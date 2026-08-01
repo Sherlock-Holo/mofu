@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::ErrorKind;
+use std::io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::time::Duration;
 
@@ -10,7 +10,7 @@ use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::errors::SeekErrorKind;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track, TrackType};
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSource, MediaSourceStream};
 use symphonia::core::meta::{
     MetadataContainer, MetadataOptions, MetadataRevision, RawValue, StandardTag, StandardVisualKey,
     Tag, Visual,
@@ -21,6 +21,49 @@ use symphonia::default;
 use super::error::{DecodeError, PlayerError, SeekError, UnsupportedMedia};
 use super::format::AudioFormat;
 use super::metadata::{CoverArt, TrackMetadata};
+
+/// Large buffered file source so remote FS jitter is amortized across fewer reads.
+struct PrefetchFile {
+    inner: BufReader<File>,
+    byte_len: u64,
+    seekable: bool,
+}
+
+impl PrefetchFile {
+    const CAPACITY: usize = 4 * 1024 * 1024;
+
+    fn open(path: &Path) -> io::Result<Self> {
+        let file = File::open(path)?;
+        let meta = file.metadata()?;
+        Ok(Self {
+            inner: BufReader::with_capacity(Self::CAPACITY, file),
+            byte_len: meta.len(),
+            seekable: meta.is_file(),
+        })
+    }
+}
+
+impl Read for PrefetchFile {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl Seek for PrefetchFile {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.inner.seek(pos)
+    }
+}
+
+impl MediaSource for PrefetchFile {
+    fn is_seekable(&self) -> bool {
+        self.seekable
+    }
+
+    fn byte_len(&self) -> Option<u64> {
+        Some(self.byte_len)
+    }
+}
 
 /// Owns the open demuxer/decoder for a single track and applies seek trimming.
 pub(crate) struct DecoderSession {
@@ -46,8 +89,8 @@ pub(crate) enum DecodePacket {
 
 impl DecoderSession {
     pub(crate) fn open(path: &Path) -> Result<Self, PlayerError> {
-        let file = File::open(path)?;
-        let mss = MediaSourceStream::new(Box::new(file), Default::default());
+        let source = PrefetchFile::open(path)?;
+        let mss = MediaSourceStream::new(Box::new(source), Default::default());
 
         let mut hint = Hint::new();
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {

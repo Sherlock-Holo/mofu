@@ -17,7 +17,10 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final library = context.watch<LibraryController>();
-    final player = context.watch<PlayerController>();
+    // 只订阅错误文案；进度 tick 不应重建整页（含子树 SongTable）。
+    final playerError = context.select<PlayerController, String?>(
+      (player) => player.error,
+    );
     final wide = MediaQuery.sizeOf(context).width >= _sidebarBreakpoint;
 
     final body = Row(
@@ -31,9 +34,9 @@ class HomePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (library.error != null || player.error != null)
+              if (library.error != null || playerError != null)
                 _ErrorBanner(
-                  message: library.error ?? player.error!,
+                  message: library.error ?? playerError!,
                   onDismiss: () {
                     // 错误在下次成功操作时清除；这里触发一次刷新。
                     library.load();

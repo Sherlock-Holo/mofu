@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::api::player::CoverArt;
 use crate::api::player::PlaybackMode;
 use crate::api::player::TrackMetadata;
 use crate::library::{
@@ -56,11 +57,33 @@ impl Library {
     }
 
     /// Return every directory and virtual playlist.
+    ///
+    /// Song rows omit cover bytes and lyrics so the first paint stays light; use
+    /// [`Self::covers_for_paths`] to hydrate artwork afterward.
     pub async fn playlists(&self) -> Result<Vec<Playlist>, String> {
         self.inner
             .playlists()
             .await
             .map(|playlists| playlists.into_iter().map(Playlist::from).collect())
+            .map_err(map_err)
+    }
+
+    /// Load cover art for the given song paths; unknown / cover-less paths are skipped.
+    ///
+    /// Prefer chunking large path lists on the Dart side so each FFI payload stays bounded.
+    pub async fn covers_for_paths(&self, paths: Vec<String>) -> Result<Vec<SongCover>, String> {
+        self.inner
+            .covers_for_paths(paths)
+            .await
+            .map(|covers| {
+                covers
+                    .into_iter()
+                    .map(|(path, cover)| SongCover {
+                        path,
+                        cover: CoverArt::from(cover),
+                    })
+                    .collect()
+            })
             .map_err(map_err)
     }
 
@@ -189,6 +212,13 @@ pub struct Song {
     pub path: String,
     pub duration_ms: u64,
     pub metadata: TrackMetadata,
+}
+
+/// Cover art for a single library path (async hydrate after lite playlists).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SongCover {
+    pub path: String,
+    pub cover: CoverArt,
 }
 
 /// Directory-backed or user-managed playlist.

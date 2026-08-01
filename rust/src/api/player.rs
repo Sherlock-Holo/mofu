@@ -297,6 +297,15 @@ pub struct PlayerSnapshot {
     pub metadata: Option<TrackMetadata>,
 }
 
+impl From<DomainCoverArt> for CoverArt {
+    fn from(value: DomainCoverArt) -> Self {
+        Self {
+            mime_type: value.mime_type,
+            data: value.data,
+        }
+    }
+}
+
 impl From<&DomainCoverArt> for CoverArt {
     fn from(value: &DomainCoverArt) -> Self {
         Self {

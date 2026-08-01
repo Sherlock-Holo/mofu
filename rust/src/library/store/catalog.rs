@@ -74,7 +74,7 @@ impl CatalogStore {
 
     pub(crate) async fn migrate(&self) -> Result<(), LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 conn.execute_batch(SCHEMA_SQL).await?;
                 conn.execute(
                     "INSERT OR IGNORE INTO meta (key, value) VALUES (?1, ?2)",
@@ -88,7 +88,7 @@ impl CatalogStore {
 
     pub(crate) async fn playlist_count(&self) -> Result<usize, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn.query("SELECT COUNT(*) FROM playlists", ()).await?;
                 let row = rows
                     .next()
@@ -101,7 +101,7 @@ impl CatalogStore {
 
     pub(crate) async fn next_playlist_id(&self) -> Result<PlaylistId, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query("SELECT COALESCE(MAX(id), 0) FROM playlists", ())
                     .await?;
@@ -117,7 +117,7 @@ impl CatalogStore {
 
     pub(crate) async fn list_playlist_rows(&self) -> Result<Vec<PlaylistRow>, LibraryError> {
         self.db
-            .run(|conn| async move { Self::list_playlist_rows_on(&conn).await })
+            .run(async move |conn| Self::list_playlist_rows_on(conn).await)
             .await
     }
 
@@ -165,7 +165,7 @@ impl CatalogStore {
 
     pub(crate) async fn playlist_row(&self, id: PlaylistId) -> Result<PlaylistRow, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query(
                         "SELECT id, name, kind, directory_path FROM playlists WHERE id = ?1",
@@ -210,8 +210,54 @@ impl CatalogStore {
         playlist_id: PlaylistId,
     ) -> Result<Vec<SongRow>, LibraryError> {
         self.db
-            .run(|conn| async move { Self::songs_for_playlist_on(&conn, playlist_id).await })
+            .run(async move |conn| Self::songs_for_playlist_on(conn, playlist_id).await)
             .await
+    }
+
+    /// Look up catalog rows for the given absolute paths (order not preserved).
+    pub(crate) async fn song_rows_for_paths(
+        &self,
+        paths: &[String],
+    ) -> Result<Vec<SongRow>, LibraryError> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let paths = paths.to_vec();
+        self.db
+            .run(async move |conn| Self::song_rows_for_paths_on(conn, &paths).await)
+            .await
+    }
+
+    async fn song_rows_for_paths_on(
+        conn: &Connection,
+        paths: &[String],
+    ) -> Result<Vec<SongRow>, LibraryError> {
+        // SQLite 变量数有上限；按批查询避免超限。
+        const BATCH: usize = 200;
+        let mut songs = Vec::new();
+        for chunk in paths.chunks(BATCH) {
+            let placeholders = (1..=chunk.len())
+                .map(|index| format!("?{index}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let sql = format!(
+                r#"
+                SELECT id, path, duration_ms,
+                       title, artist, album, album_artist, composer, lyricist,
+                       performer, genre, comment, date, year,
+                       track_number, track_total, disc_number, disc_total,
+                       cover_mime, cover_ext
+                FROM songs
+                WHERE path IN ({placeholders})
+                "#
+            );
+            let params: Vec<Value> = chunk.iter().map(|path| Value::Text(path.clone())).collect();
+            let mut rows = conn.query(&sql, params).await?;
+            while let Some(row) = rows.next().await? {
+                songs.push(Self::song_row_from_query(row)?);
+            }
+        }
+        Ok(songs)
     }
 
     async fn songs_for_playlist_on(
@@ -325,22 +371,18 @@ impl CatalogStore {
         let name = name.to_owned();
         let directory_path = directory_path.map(str::to_owned);
         self.db
-            .run(|conn| {
-                let name = name.clone();
-                let directory_path = directory_path.clone();
-                async move {
-                    conn.execute(
-                        "INSERT INTO playlists (id, name, kind, directory_path) VALUES (?1, ?2, ?3, ?4)",
-                        params![
-                            id as i64,
-                            name,
-                            stored_kind.as_str(),
-                            directory_path,
-                        ],
-                    )
-                        .await?;
-                    Ok(())
-                }
+            .run(async move |conn| {
+                conn.execute(
+                    "INSERT INTO playlists (id, name, kind, directory_path) VALUES (?1, ?2, ?3, ?4)",
+                    params![
+                        id as i64,
+                        name.as_str(),
+                        stored_kind.as_str(),
+                        directory_path.clone(),
+                    ],
+                )
+                    .await?;
+                Ok(())
             })
             .await
     }
@@ -351,20 +393,20 @@ impl CatalogStore {
     ) -> Result<Option<PlaylistId>, LibraryError> {
         let directory_path = directory_path.to_owned();
         self.db
-            .run(|conn| {
-                let directory_path = directory_path.clone();
-                async move {
-                    let mut rows = conn
-                        .query(
-                            "SELECT id FROM playlists WHERE kind = ?1 AND directory_path = ?2",
-                            params![StoredPlaylistKind::Directory.as_str(), directory_path],
-                        )
-                        .await?;
-                    Ok(match rows.next().await? {
-                        Some(row) => Some(row.get::<i64>(0)? as PlaylistId),
-                        None => None,
-                    })
-                }
+            .run(async move |conn| {
+                let mut rows = conn
+                    .query(
+                        "SELECT id FROM playlists WHERE kind = ?1 AND directory_path = ?2",
+                        params![
+                            StoredPlaylistKind::Directory.as_str(),
+                            directory_path.as_str()
+                        ],
+                    )
+                    .await?;
+                Ok(match rows.next().await? {
+                    Some(row) => Some(row.get::<i64>(0)? as PlaylistId),
+                    None => None,
+                })
             })
             .await
     }
@@ -376,38 +418,37 @@ impl CatalogStore {
     ) -> Result<(), LibraryError> {
         let name = name.to_owned();
         self.db
-            .run(|conn| {
-                let name = name.clone();
-                async move {
-                    let changed = conn
-                        .execute(
-                            "UPDATE playlists SET name = ?1 WHERE id = ?2",
-                            params![name, id as i64],
-                        )
-                        .await?;
-                    if changed == 0 {
-                        return Err(LibraryError::PlaylistNotFound);
-                    }
-                    Ok(())
+            .run(async move |conn| {
+                let changed = conn
+                    .execute(
+                        "UPDATE playlists SET name = ?1 WHERE id = ?2",
+                        params![name.as_str(), id as i64],
+                    )
+                    .await?;
+                if changed == 0 {
+                    return Err(LibraryError::PlaylistNotFound);
                 }
+                Ok(())
             })
             .await
     }
 
     pub(crate) async fn delete_playlist(&self, id: PlaylistId) -> Result<(), LibraryError> {
         self.db
-            .run(|conn| async move {
-                conn.execute(
+            .run(async move |conn| {
+                let tx = conn.transaction().await?;
+                tx.execute(
                     "DELETE FROM playlist_songs WHERE playlist_id = ?1",
                     params![id as i64],
                 )
                 .await?;
-                let changed = conn
+                let changed = tx
                     .execute("DELETE FROM playlists WHERE id = ?1", params![id as i64])
                     .await?;
                 if changed == 0 {
                     return Err(LibraryError::PlaylistNotFound);
                 }
+                tx.commit().await?;
                 Ok(())
             })
             .await
@@ -423,11 +464,7 @@ impl CatalogStore {
         let path = path.to_owned();
         let tags = tags.clone();
         self.db
-            .run(|conn| {
-                let path = path.clone();
-                let tags = tags.clone();
-                async move { Self::upsert_song_on(&conn, &path, duration_ms, &tags).await }
-            })
+            .run(async move |conn| Self::upsert_song_on(conn, &path, duration_ms, &tags).await)
             .await
     }
 
@@ -507,7 +544,7 @@ impl CatalogStore {
         position: i64,
     ) -> Result<(), LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 conn.execute(
                     r#"
                     INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, position)
@@ -528,23 +565,23 @@ impl CatalogStore {
     ) -> Result<(), LibraryError> {
         let song_ids = song_ids.to_vec();
         self.db
-            .run(|conn| {
-                let song_ids = song_ids.clone();
-                async move {
-                    conn.execute(
-                        "DELETE FROM playlist_songs WHERE playlist_id = ?1",
-                        params![playlist_id as i64],
+            .run(async move |conn| {
+                // DELETE then INSERT must be atomic: Busy mid-way would leave an empty playlist.
+                let tx = conn.transaction().await?;
+                tx.execute(
+                    "DELETE FROM playlist_songs WHERE playlist_id = ?1",
+                    params![playlist_id as i64],
+                )
+                    .await?;
+                for (position, song_id) in song_ids.iter().copied().enumerate() {
+                    tx.execute(
+                        "INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?1, ?2, ?3)",
+                        params![playlist_id as i64, song_id, position as i64],
                     )
                         .await?;
-                    for (position, song_id) in song_ids.into_iter().enumerate() {
-                        conn.execute(
-                            "INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?1, ?2, ?3)",
-                            params![playlist_id as i64, song_id, position as i64],
-                        )
-                            .await?;
-                    }
-                    Ok(())
                 }
+                tx.commit().await?;
+                Ok(())
             })
             .await
     }
@@ -554,7 +591,7 @@ impl CatalogStore {
         playlist_id: PlaylistId,
     ) -> Result<Vec<String>, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query(
                         r#"
@@ -581,7 +618,7 @@ impl CatalogStore {
         &self,
     ) -> Result<Vec<(SongId, Option<CoverExt>)>, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query(
                         r#"
@@ -611,7 +648,7 @@ impl CatalogStore {
 
     pub(crate) async fn max_position(&self, playlist_id: PlaylistId) -> Result<i64, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query(
                         "SELECT COALESCE(MAX(position), -1) FROM playlist_songs WHERE playlist_id = ?1",
@@ -630,7 +667,7 @@ impl CatalogStore {
     /// Load persisted playback mode; missing key defaults to sequential.
     pub(crate) async fn playback_mode(&self) -> Result<StoredPlaybackMode, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query(
                         "SELECT value FROM meta WHERE key = ?1",
@@ -655,7 +692,7 @@ impl CatalogStore {
         mode: StoredPlaybackMode,
     ) -> Result<(), LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 conn.execute(
                     "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                     params![PLAYBACK_MODE_KEY, mode.as_str()],
@@ -669,7 +706,7 @@ impl CatalogStore {
     /// Load persisted volume; missing key defaults to `1.0`.
     pub(crate) async fn volume(&self) -> Result<f64, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query("SELECT value FROM meta WHERE key = ?1", params![VOLUME_KEY])
                     .await?;
@@ -691,16 +728,13 @@ impl CatalogStore {
         let volume = volume.clamp(0.0, 1.0);
         let value = volume.to_string();
         self.db
-            .run(|conn| {
-                let value = value.clone();
-                async move {
-                    conn.execute(
-                        "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                        params![VOLUME_KEY, value.as_str()],
-                    )
-                        .await?;
-                    Ok(())
-                }
+            .run(async move |conn| {
+                conn.execute(
+                    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    params![VOLUME_KEY, value.as_str()],
+                )
+                    .await?;
+                Ok(())
             })
             .await
     }
@@ -710,7 +744,7 @@ impl CatalogStore {
     /// Corrupt JSON is cleared and treated as no session (not silently defaulted).
     pub(crate) async fn playback_session(&self) -> Result<Option<PlaybackSession>, LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 let mut rows = conn
                     .query(
                         "SELECT value FROM meta WHERE key = ?1",
@@ -742,23 +776,20 @@ impl CatalogStore {
     ) -> Result<(), LibraryError> {
         let value = session.to_json()?;
         self.db
-            .run(|conn| {
-                let value = value.clone();
-                async move {
-                    conn.execute(
-                        "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                        params![PLAYBACK_SESSION_KEY, value.as_str()],
-                    )
-                        .await?;
-                    Ok(())
-                }
+            .run(async move |conn| {
+                conn.execute(
+                    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    params![PLAYBACK_SESSION_KEY, value.as_str()],
+                )
+                    .await?;
+                Ok(())
             })
             .await
     }
 
     pub(crate) async fn clear_playback_session(&self) -> Result<(), LibraryError> {
         self.db
-            .run(|conn| async move {
+            .run(async move |conn| {
                 conn.execute(
                     "DELETE FROM meta WHERE key = ?1",
                     params![PLAYBACK_SESSION_KEY],
@@ -774,17 +805,13 @@ impl CatalogStore {
         let key = key.to_owned();
         let value = value.to_owned();
         self.db
-            .run(|conn| {
-                let key = key.clone();
-                let value = value.clone();
-                async move {
-                    conn.execute(
-                        "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                        params![key.as_str(), value.as_str()],
-                    )
-                        .await?;
-                    Ok(())
-                }
+            .run(async move |conn| {
+                conn.execute(
+                    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    params![key.as_str(), value.as_str()],
+                )
+                    .await?;
+                Ok(())
             })
             .await
     }
