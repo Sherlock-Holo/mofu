@@ -173,6 +173,7 @@ class _PlaylistTile extends StatelessWidget {
     final selected = library.selectedId == playlist.id;
 
     return Material(
+      key: ValueKey(playlist.id),
       color: Colors.transparent,
       child: ListTile(
         dense: true,
@@ -249,7 +250,7 @@ class _PlaylistTile extends StatelessWidget {
         initial: playlist.name,
         confirmLabel: '保存',
       );
-      if (name != null) {
+      if (name != null && context.mounted) {
         await library.renameVirtual(playlist.id, name);
       }
     } else if (action == 'import') {
@@ -322,16 +323,60 @@ Future<String?> _promptText(
   required String hint,
   required String confirmLabel,
   String? initial,
-}) async {
-  final controller = TextEditingController(text: initial ?? '');
-  final result = await showDialog<String>(
+    }) {
+  return showDialog<String>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
+    builder: (context) => _PromptTextDialog(
+      title: title,
+      hint: hint,
+      confirmLabel: confirmLabel,
+      initial: initial,
+    ),
+  );
+}
+
+/// Owns [TextEditingController] for the dialog lifetime so it is not disposed
+/// while the route (and TextField) is still tearing down.
+class _PromptTextDialog extends StatefulWidget {
+  const _PromptTextDialog({
+    required this.title,
+    required this.hint,
+    required this.confirmLabel,
+    this.initial,
+  });
+
+  final String title;
+  final String hint;
+  final String confirmLabel;
+  final String? initial;
+
+  @override
+  State<_PromptTextDialog> createState() => _PromptTextDialogState();
+}
+
+class _PromptTextDialogState extends State<_PromptTextDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initial ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
       content: TextField(
-        controller: controller,
+        controller: _controller,
         autofocus: true,
-        decoration: InputDecoration(hintText: hint),
+        decoration: InputDecoration(hintText: widget.hint),
         onSubmitted: (value) => Navigator.pop(context, value),
       ),
       actions: [
@@ -340,12 +385,10 @@ Future<String?> _promptText(
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, controller.text),
-          child: Text(confirmLabel),
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: Text(widget.confirmLabel),
         ),
       ],
-    ),
-  );
-  controller.dispose();
-  return result;
+    );
+  }
 }

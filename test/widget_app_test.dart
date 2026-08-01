@@ -192,8 +192,8 @@ void main() {
       await _pumpApp(tester, library: library, player: player);
 
       expect(find.text('草莓奶油'), findsNothing);
-      expect(find.text('目录'), findsOneWidget);
-      expect(find.text('虚拟列表'), findsOneWidget);
+      expect(find.text('目录'), findsWidgets);
+      expect(find.text('虚拟列表'), findsWidgets);
       expect(find.text('本地音乐'), findsWidgets);
       expect(find.text('最爱'), findsOneWidget);
       expect(find.text('草莓糖'), findsWidgets);
@@ -222,6 +222,56 @@ void main() {
       expect(library.selectedId, BigInt.from(2));
       expect(find.text('午后茶'), findsOneWidget);
       expect(find.text('奶油云'), findsNothing);
+    });
+
+    testWidgets('header follows browsed playlist, not playing track',
+        (tester) async {
+      final emptyVirtual = Playlist(
+        id: BigInt.from(3),
+        name: '空列表',
+        kind: PlaylistKind.virtual,
+        songs: const [],
+      );
+      final library = LibraryController.fake(
+        playlists: [_directoryPlaylist(), emptyVirtual],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+
+      await _pumpApp(tester, library: library, player: player);
+
+      // 正在播「草莓糖」，但头部应是浏览中的「本地音乐」。
+      expect(find.text('本地音乐'), findsWidgets);
+      expect(find.text('2 首'), findsWidgets);
+
+      await tester.tap(find.text('空列表'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('空列表'), findsWidgets);
+      expect(find.text('0 首'), findsWidgets);
+      // 播放未停，底栏仍显示当前曲。
+      expect(find.text('草莓糖'), findsWidgets);
+      expect(player.currentIndex, BigInt.zero);
+    });
+
+    testWidgets('play all loads browsed playlist into queue from start',
+        (tester) async {
+      final library = LibraryController.fake(
+        playlists: [_directoryPlaylist(), _virtualPlaylist()],
+        selectedId: BigInt.from(2),
+      );
+      final player = PlayerController.fake();
+
+      await _pumpApp(tester, library: library, player: player);
+
+      expect(find.text('播放全部'), findsOneWidget);
+      await tester.tap(find.text('播放全部'));
+      await tester.pump();
+
+      expect(player.queue.map((item) => item.path), ['/music/c.mp3']);
+      expect(player.currentIndex, BigInt.zero);
+      expect(player.isPlaying, isTrue);
     });
 
     testWidgets('playback mode button on home bar is wired to player',
@@ -259,11 +309,11 @@ void main() {
         size: const Size(700, 900),
       );
 
-      expect(find.text('目录'), findsNothing);
+      expect(find.text('虚拟列表'), findsNothing);
       await tester.tap(find.byIcon(Icons.menu));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('目录'), findsOneWidget);
+      expect(find.text('虚拟列表'), findsOneWidget);
       expect(find.text('本地音乐'), findsWidgets);
     });
   });

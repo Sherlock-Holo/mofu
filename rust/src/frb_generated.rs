@@ -26,8 +26,8 @@
 
 // Section: imports
 
+use flutter_rust_bridge::for_generated::Lockable;
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
-use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
 use flutter_rust_bridge::{Handler, IntoIntoDart};
 
 use crate::api::library::*;
@@ -50,15 +50,16 @@ flutter_rust_bridge::frb_generated_default_handler!();
 // Section: wire_funcs
 
 fn wire__crate__api__library__Library_add_directory_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "Library_add_directory",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -75,38 +76,41 @@ fn wire__crate__api__library__Library_add_directory_impl(
             >>::sse_decode(&mut deserializer);
             let api_path = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let mut api_that_guard = None;
-                let decode_indices_ =
-                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
-                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
-                            &api_that, 0, false,
-                        ),
-                    ]);
-                for i in decode_indices_ {
-                    match i {
-                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
-                        _ => unreachable!(),
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
                     }
-                }
-                let api_that_guard = api_that_guard.unwrap();
-                let output_ok =
-                    crate::api::library::Library::add_directory(&*api_that_guard, api_path)?;
-                Ok(output_ok)
-            })())
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok =
+                        crate::api::library::Library::add_directory(&*api_that_guard, api_path)?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
 fn wire__crate__api__library__Library_add_files_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "Library_add_files",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -124,25 +128,30 @@ fn wire__crate__api__library__Library_add_files_impl(
             let api_id = <u64>::sse_decode(&mut deserializer);
             let api_paths = <Vec<String>>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let mut api_that_guard = None;
-                let decode_indices_ =
-                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
-                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
-                            &api_that, 0, false,
-                        ),
-                    ]);
-                for i in decode_indices_ {
-                    match i {
-                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
-                        _ => unreachable!(),
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
                     }
-                }
-                let api_that_guard = api_that_guard.unwrap();
-                let output_ok =
-                    crate::api::library::Library::add_files(&*api_that_guard, api_id, api_paths)?;
-                Ok(output_ok)
-            })())
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok = crate::api::library::Library::add_files(
+                        &*api_that_guard,
+                        api_id,
+                        api_paths,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -403,15 +412,16 @@ fn wire__crate__api__library__Library_playlists_impl(
     )
 }
 fn wire__crate__api__library__Library_refresh_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "Library_refresh",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -428,24 +438,27 @@ fn wire__crate__api__library__Library_refresh_impl(
             >>::sse_decode(&mut deserializer);
             let api_id = <u64>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let mut api_that_guard = None;
-                let decode_indices_ =
-                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
-                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
-                            &api_that, 0, false,
-                        ),
-                    ]);
-                for i in decode_indices_ {
-                    match i {
-                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
-                        _ => unreachable!(),
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
                     }
-                }
-                let api_that_guard = api_that_guard.unwrap();
-                let output_ok = crate::api::library::Library::refresh(&*api_that_guard, api_id)?;
-                Ok(output_ok)
-            })())
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok =
+                        crate::api::library::Library::refresh(&*api_that_guard, api_id)?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -1912,6 +1925,11 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
+        1 => {
+            wire__crate__api__library__Library_add_directory_impl(port, ptr, rust_vec_len, data_len)
+        }
+        2 => wire__crate__api__library__Library_add_files_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__library__Library_refresh_impl(port, ptr, rust_vec_len, data_len),
         30 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
@@ -1925,8 +1943,6 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__library__Library_add_directory_impl(ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__library__Library_add_files_impl(ptr, rust_vec_len, data_len),
         3 => wire__crate__api__library__Library_create_virtual_impl(ptr, rust_vec_len, data_len),
         4 => wire__crate__api__library__Library_delete_virtual_impl(ptr, rust_vec_len, data_len),
         5 => wire__crate__api__library__Library_import_from_playlist_impl(
@@ -1937,7 +1953,6 @@ fn pde_ffi_dispatcher_sync_impl(
         6 => wire__crate__api__library__Library_new_impl(ptr, rust_vec_len, data_len),
         7 => wire__crate__api__library__Library_new_at_impl(ptr, rust_vec_len, data_len),
         8 => wire__crate__api__library__Library_playlists_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__library__Library_refresh_impl(ptr, rust_vec_len, data_len),
         10 => wire__crate__api__library__Library_rename_virtual_impl(ptr, rust_vec_len, data_len),
         11 => wire__crate__api__player__Player_duration_ms_impl(ptr, rust_vec_len, data_len),
         12 => wire__crate__api__player__Player_metadata_impl(ptr, rust_vec_len, data_len),
@@ -2730,11 +2745,7 @@ mod io {
 
     // Section: imports
 
-    use flutter_rust_bridge::for_generated::byteorder::{
-        NativeEndian, ReadBytesExt, WriteBytesExt,
-    };
-    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
-    use flutter_rust_bridge::{Handler, IntoIntoDart};
+    use flutter_rust_bridge::Handler;
 
     use super::*;
     use crate::api::library::*;
@@ -2788,7 +2799,7 @@ mod web {
     };
     use flutter_rust_bridge::for_generated::wasm_bindgen;
     use flutter_rust_bridge::for_generated::wasm_bindgen::prelude::*;
-    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
+    use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
     use flutter_rust_bridge::{Handler, IntoIntoDart};
 
     use super::*;

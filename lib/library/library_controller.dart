@@ -106,12 +106,12 @@ class LibraryController extends ChangeNotifier {
     _selectedId = _playlists.first.id;
   }
 
-  Future<void> _mutate(void Function() action) async {
+  Future<void> _mutate(Future<void> Function() action) async {
     _loading = true;
     _error = null;
     notifyListeners();
     try {
-      action();
+      await action();
       if (!_fake) {
         _playlists = _library!.playlists();
       }
@@ -129,7 +129,7 @@ class LibraryController extends ChangeNotifier {
     if (trimmed.isEmpty) {
       return;
     }
-    await _mutate(() {
+    await _mutate(() async {
       if (_fake) {
         final id = BigInt.from(_playlists.length + 1);
         final created = Playlist(
@@ -152,7 +152,7 @@ class LibraryController extends ChangeNotifier {
     if (trimmed.isEmpty) {
       return;
     }
-    await _mutate(() {
+    await _mutate(() async {
       if (_fake) {
         _playlists = [
           for (final playlist in _playlists)
@@ -174,7 +174,7 @@ class LibraryController extends ChangeNotifier {
   }
 
   Future<void> deleteVirtual(BigInt id) async {
-    await _mutate(() {
+    await _mutate(() async {
       if (_fake) {
         _playlists = [
           for (final playlist in _playlists)
@@ -201,11 +201,11 @@ class LibraryController extends ChangeNotifier {
   }
 
   Future<void> refresh(BigInt id) async {
-    await _mutate(() {
+    await _mutate(() async {
       if (_fake) {
         return;
       }
-      _library!.refresh(id: id);
+      await _library!.refresh(id: id);
     });
   }
 
@@ -220,8 +220,8 @@ class LibraryController extends ChangeNotifier {
     if (path == null || path.isEmpty) {
       return;
     }
-    await _mutate(() {
-      final created = _library!.addDirectory(path: path);
+    await _mutate(() async {
+      final created = await _library!.addDirectory(path: path);
       _selectedId = created.id;
     });
   }
@@ -263,13 +263,13 @@ class LibraryController extends ChangeNotifier {
       return;
     }
 
-    await _mutate(() {
+    await _mutate(() async {
       var target = selectedPlaylist;
       if (target == null || target.kind != PlaylistKind.virtual) {
         target = _library!.createVirtual(name: '导入的歌曲');
         _selectedId = target.id;
       }
-      _library!.addFiles(id: target.id, paths: paths);
+      await _library!.addFiles(id: target.id, paths: paths);
     });
   }
 
@@ -278,7 +278,7 @@ class LibraryController extends ChangeNotifier {
     required BigInt sourceId,
     List<String> paths = const [],
   }) async {
-    await _mutate(() {
+    await _mutate(() async {
       if (_fake) {
         Playlist? source;
         for (final playlist in _playlists) {

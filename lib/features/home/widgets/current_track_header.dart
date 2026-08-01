@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/library/library_controller.dart';
 import 'package:mofu/player/player_controller.dart';
+import 'package:mofu/src/rust/api/library.dart';
 import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:provider/provider.dart';
 
-/// 主区域顶部：当前歌曲封面与元数据；空曲库时提供导入入口。
+/// 主区域顶部：当前浏览列表的摘要（封面、名称、曲目数）。
+///
+/// 正在播放的信息只出现在底部 [PlaybackBar] 与播放详情页，避免与列表浏览混淆。
 class CurrentTrackHeader extends StatelessWidget {
   const CurrentTrackHeader({super.key});
 
@@ -15,11 +17,9 @@ class CurrentTrackHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final library = context.watch<LibraryController>();
     final player = context.watch<PlayerController>();
-    final meta = player.metadata;
     final playlist = library.selectedPlaylist;
 
-    if (library.playlists.isEmpty ||
-        library.playlists.every((p) => p.songs.isEmpty)) {
+    if (library.playlists.isEmpty) {
       return _EmptyLibraryActions(
         onOpenDirectory: library.pickAndAddDirectory,
         onAddFiles: library.pickAndAddFiles,
@@ -27,99 +27,91 @@ class CurrentTrackHeader extends StatelessWidget {
       );
     }
 
-    final title = _titleOf(meta, player);
-    final artist = _orUnknown(meta?.artist, '未知歌手');
-    final album = _orUnknown(meta?.album, '未知专辑');
-    final year = meta?.year;
+    if (playlist == null) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(24, 28, 24, 12),
+        child: Text('选择或导入一个播放列表'),
+      );
+    }
+
+    final cover = _playlistCover(playlist);
+    final kindLabel = switch (playlist.kind) {
+      PlaylistKind.directory => '目录',
+      PlaylistKind.virtual => '虚拟列表',
+    };
+    final count = playlist.songs.length;
+    final subtitleParts = <String>[
+      '$count 首',
+      if (playlist.kind == PlaylistKind.directory &&
+          playlist.directoryPath != null &&
+          playlist.directoryPath!.isNotEmpty)
+        playlist.directoryPath!,
+    ];
+    final subtitle = subtitleParts.join(' · ');
+    final paths = playlist.songs.map((song) => song.path).toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
       child: Material(
         color: StrawberryCream.card,
         borderRadius: BorderRadius.circular(StrawberryCream.radius),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(StrawberryCream.radius),
-          onTap: meta == null && player.currentIndex == null
-              ? null
-              : () => context.go('/now-playing'),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                CoverView(
-                  cover: meta?.cover,
-                  size: 96,
-                  shadow: true,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CoverView(
+                cover: cover,
+                size: 96,
+                shadow: true,
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      kindLabel,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      playlist.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        playlist?.name ?? '曲库',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        [
-                          artist,
-                          album,
-                          if (year != null) '$year',
-                        ].join(' · '),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: StrawberryCream.wine.withValues(alpha: 0.35),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: paths.isEmpty ? null : () => player.playAll(paths),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('播放全部'),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  String _titleOf(TrackMetadata? meta, PlayerController player) {
-    final titled = meta?.title?.trim();
-    if (titled != null && titled.isNotEmpty) {
-      return titled;
-    }
-    final index = player.currentIndex;
-    if (index != null) {
-      for (final item in player.queue) {
-        if (item.index == index) {
-          return _fileName(item.path);
-        }
+  /// 取列表中第一张有内嵌封面的歌；都没有则交给 [CoverView] 占位。
+  CoverArt? _playlistCover(Playlist playlist) {
+    for (final song in playlist.songs) {
+      final cover = song.metadata.cover;
+      if (cover != null && cover.data.isNotEmpty) {
+        return cover;
       }
     }
-    return '选择一首歌曲开始播放';
-  }
-
-  String _orUnknown(String? value, String fallback) {
-    final trimmed = value?.trim();
-    if (trimmed == null || trimmed.isEmpty) {
-      return fallback;
-    }
-    return trimmed;
-  }
-
-  String _fileName(String path) {
-    final slash = path.replaceAll('\\', '/').split('/').last;
-    return slash.isEmpty ? '未知曲目' : slash;
+    return null;
   }
 }
 

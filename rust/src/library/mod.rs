@@ -12,6 +12,7 @@ use directories::ProjectDirs;
 pub use error::LibraryError;
 use model::LibraryManifest;
 pub use model::{Playlist, PlaylistId, PlaylistKind, Song};
+use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::player::{MediaInspection, MediaInspector, SymphoniaMediaInspector};
@@ -292,13 +293,17 @@ impl Library {
     }
 
     fn scan_directory(&self, root: &Path) -> Vec<Song> {
-        let mut songs = WalkDir::new(root)
+        // Collect paths first so WalkDir stays single-threaded; inspect in parallel.
+        let paths = WalkDir::new(root)
             .follow_links(false)
             .into_iter()
             .filter_map(Result::ok)
             .filter(|entry| entry.file_type().is_file())
             .map(|entry| entry.into_path())
             .filter(|path| Self::is_audio_path(path))
+            .collect::<Vec<_>>();
+        let mut songs = paths
+            .into_par_iter()
             .filter_map(|path| self.inspect_path(&path))
             .collect::<Vec<_>>();
         songs.sort_by(|left, right| left.path.cmp(&right.path));

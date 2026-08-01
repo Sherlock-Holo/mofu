@@ -8,7 +8,7 @@ import 'package:mofu/player/player_controller.dart';
 import 'package:mofu/widgets/playback_bar.dart';
 import 'package:provider/provider.dart';
 
-/// 首页：侧栏播放列表 + 当前曲信息 + 曲目表 + 底栏。
+/// 首页：侧栏播放列表 + 浏览列表摘要 + 曲目表 + 底栏。
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 

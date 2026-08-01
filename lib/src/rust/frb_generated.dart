@@ -3,15 +3,17 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+
 import 'api/library.dart';
 import 'api/player.dart';
 import 'api/simple.dart';
-import 'dart:async';
-import 'dart:convert';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -84,10 +86,10 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Playlist crateApiLibraryLibraryAddDirectory(
+  Future<Playlist> crateApiLibraryLibraryAddDirectory(
       {required Library that, required String path});
 
-  BigInt crateApiLibraryLibraryAddFiles(
+  Future<BigInt> crateApiLibraryLibraryAddFiles(
       {required Library that, required BigInt id, required List<String> paths});
 
   Playlist crateApiLibraryLibraryCreateVirtual(
@@ -108,7 +110,7 @@ abstract class RustLibApi extends BaseApi {
 
   List<Playlist> crateApiLibraryLibraryPlaylists({required Library that});
 
-  Playlist crateApiLibraryLibraryRefresh(
+  Future<Playlist> crateApiLibraryLibraryRefresh(
       {required Library that, required BigInt id});
 
   void crateApiLibraryLibraryRenameVirtual(
@@ -185,15 +187,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Playlist crateApiLibraryLibraryAddDirectory(
+  Future<Playlist> crateApiLibraryLibraryAddDirectory(
       {required Library that, required String path}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
             that, serializer);
         sse_encode_String(path, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 1, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_playlist,
@@ -212,18 +215,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  BigInt crateApiLibraryLibraryAddFiles(
+  Future<BigInt> crateApiLibraryLibraryAddFiles(
       {required Library that,
       required BigInt id,
       required List<String> paths}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
             that, serializer);
         sse_encode_u_64(id, serializer);
         sse_encode_list_String(paths, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 2, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_64,
@@ -401,15 +405,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Playlist crateApiLibraryLibraryRefresh(
+  Future<Playlist> crateApiLibraryLibraryRefresh(
       {required Library that, required BigInt id}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
             that, serializer);
         sse_encode_u_64(id, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 9, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_playlist,
@@ -2222,11 +2227,11 @@ class LibraryImpl extends RustOpaque implements Library {
   );
 
   /// Recursively scan and persist a music directory.
-  Playlist addDirectory({required String path}) => RustLib.instance.api
+  Future<Playlist> addDirectory({required String path}) => RustLib.instance.api
       .crateApiLibraryLibraryAddDirectory(that: this, path: path);
 
   /// Inspect and add multiple files to a virtual playlist.
-  BigInt addFiles({required BigInt id, required List<String> paths}) =>
+  Future<BigInt> addFiles({required BigInt id, required List<String> paths}) =>
       RustLib.instance.api
           .crateApiLibraryLibraryAddFiles(that: this, id: id, paths: paths);
 
@@ -2255,7 +2260,7 @@ class LibraryImpl extends RustOpaque implements Library {
       );
 
   /// Rescan a directory playlist or drop invalid virtual-list paths.
-  Playlist refresh({required BigInt id}) =>
+  Future<Playlist> refresh({required BigInt id}) =>
       RustLib.instance.api.crateApiLibraryLibraryRefresh(that: this, id: id);
 
   /// Rename a virtual playlist.

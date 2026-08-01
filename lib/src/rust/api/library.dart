@@ -3,8 +3,9 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
-import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+
+import '../frb_generated.dart';
 import 'player.dart';
 
 // These functions are ignored because they are not marked as `pub`: `map_err`
@@ -13,10 +14,10 @@ import 'player.dart';
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Library>>
 abstract class Library implements RustOpaqueInterface {
   /// Recursively scan and persist a music directory.
-  Playlist addDirectory({required String path});
+  Future<Playlist> addDirectory({required String path});
 
   /// Inspect and add multiple files to a virtual playlist.
-  BigInt addFiles({required BigInt id, required List<String> paths});
+  Future<BigInt> addFiles({required BigInt id, required List<String> paths});
 
   /// Create an empty user-managed playlist.
   Playlist createVirtual({required String name});
@@ -43,7 +44,7 @@ abstract class Library implements RustOpaqueInterface {
   List<Playlist> playlists();
 
   /// Rescan a directory playlist or drop invalid virtual-list paths.
-  Playlist refresh({required BigInt id});
+  Future<Playlist> refresh({required BigInt id});
 
   /// Rename a virtual playlist.
   void renameVirtual({required BigInt id, required String name});

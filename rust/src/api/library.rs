@@ -54,7 +54,6 @@ impl Library {
     }
 
     /// Recursively scan and persist a music directory.
-    #[flutter_rust_bridge::frb(sync)]
     pub fn add_directory(&self, path: String) -> Result<Playlist, String> {
         self.inner
             .add_directory(path.into())
@@ -75,7 +74,6 @@ impl Library {
     }
 
     /// Inspect and add multiple files to a virtual playlist.
-    #[flutter_rust_bridge::frb(sync)]
     pub fn add_files(&self, id: u64, paths: Vec<String>) -> Result<u64, String> {
         self.inner
             .add_files(id, paths.into_iter().map(PathBuf::from).collect())
@@ -100,7 +98,6 @@ impl Library {
     }
 
     /// Rescan a directory playlist or drop invalid virtual-list paths.
-    #[flutter_rust_bridge::frb(sync)]
     pub fn refresh(&self, id: u64) -> Result<Playlist, String> {
         self.inner.refresh(id).map(Playlist::from).map_err(map_err)
     }
