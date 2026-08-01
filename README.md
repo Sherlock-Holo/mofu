@@ -4,6 +4,12 @@
 
 [English](README.en.md)
 
+<p align="center">
+  <img src="assets/main.png" alt="首页" width="45%" />
+  &nbsp;
+  <img src="assets/playing.png" alt="正在播放" width="45%" />
+</p>
+
 ## 功能
 
 - **曲库管理**：扫描本地音乐目录，或手动添加音频文件；支持目录播放列表与用户自建虚拟播放列表

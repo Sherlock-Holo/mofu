@@ -4,6 +4,12 @@ Local music player.
 
 [中文](README.md)
 
+<p align="center">
+  <img src="assets/main.png" alt="Home" width="45%" />
+  &nbsp;
+  <img src="assets/playing.png" alt="Now playing" width="45%" />
+</p>
+
 ## Features
 
 - **Library management**: scan local music directories or add audio files manually; supports directory playlists and user-created virtual playlists
