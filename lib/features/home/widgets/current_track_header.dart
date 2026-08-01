@@ -92,7 +92,9 @@ class CurrentTrackHeader extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: paths.isEmpty ? null : () => player.playAll(paths),
+                onPressed: paths.isEmpty
+                    ? null
+                    : () => player.playAll(paths, playlistId: playlist.id),
                 icon: const Icon(Icons.play_arrow_rounded),
                 label: const Text('播放全部'),
               ),

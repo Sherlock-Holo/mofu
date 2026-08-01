@@ -191,7 +191,7 @@ void main() {
 
       await _pumpApp(tester, library: library, player: player);
 
-      expect(find.text('草莓奶油'), findsNothing);
+      expect(find.text('Mofu'), findsNothing);
       expect(find.text('目录'), findsWidgets);
       expect(find.text('虚拟列表'), findsWidgets);
       expect(find.text('本地音乐'), findsWidgets);
@@ -272,6 +272,7 @@ void main() {
       expect(player.queue.map((item) => item.path), ['/music/c.mp3']);
       expect(player.currentIndex, BigInt.zero);
       expect(player.isPlaying, isTrue);
+      expect(player.sourcePlaylistId, BigInt.from(2));
     });
 
     testWidgets('playback mode button on home bar is wired to player',
@@ -292,6 +293,54 @@ void main() {
       await tester.pump();
       expect(player.playbackMode, PlaybackMode.repeatAll);
       expect(find.byTooltip('列表循环'), findsOneWidget);
+    });
+
+    testWidgets('pause persists playback session with playlist and path',
+        (tester) async {
+      PlaybackSession? saved;
+      final library = LibraryController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+      player.sourcePlaylistId = BigInt.one;
+
+      await _pumpApp(tester, library: library, player: player);
+      // initState 会先接到 LibraryController；测试覆盖后再验证触发。
+      player.persistPlaybackSession = (session) async {
+        saved = session;
+      };
+      player.pause();
+      await tester.pump();
+
+      expect(saved?.playlistId, BigInt.one);
+      expect(saved?.path, '/music/a.mp3');
+      expect(saved?.positionMs, BigInt.from(2500));
+    });
+
+    testWidgets('volume persist uses trailing 400ms debounce', (tester) async {
+      final volumes = <double>[];
+      final library = LibraryController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake();
+
+      await _pumpApp(tester, library: library, player: player);
+      player.persistVolume = (volume) async {
+        volumes.add(volume);
+      };
+      player.setVolume(0.5);
+      player.setVolume(0.3);
+      await tester.pump(const Duration(milliseconds: 399));
+      expect(volumes, isEmpty);
+
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(volumes, [0.3]);
+
+      player.setVolume(0.1);
+      player.flushVolumePersist();
+      expect(volumes, [0.3, 0.1]);
     });
 
     testWidgets('narrow layout uses drawer instead of persistent sidebar',

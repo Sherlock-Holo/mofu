@@ -51,7 +51,7 @@ class HomePage extends StatelessWidget {
       appBar: wide
           ? null
           : AppBar(
-              title: const Text('草莓奶油'),
+              title: const Text('Mofu'),
               actions: [
                 IconButton(
                   tooltip: '打开音乐目录',

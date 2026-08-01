@@ -6,13 +6,16 @@ use turso::{Connection, Value, params};
 
 use super::super::error::LibraryError;
 use super::super::model::{
-    CoverExt, PlaylistId, PlaylistKind, PlaylistRow, SongId, SongRow, SongTags, StoredPlaybackMode,
-    StoredPlaylistKind,
+    CoverExt, PlaybackSession, PlaylistId, PlaylistKind, PlaylistRow, SongId, SongRow, SongTags,
+    StoredPlaybackMode, StoredPlaylistKind,
 };
 use super::reconnect::ReconnectableDb;
 
 const SCHEMA_VERSION: &str = "1";
 const PLAYBACK_MODE_KEY: &str = "playback_mode";
+const VOLUME_KEY: &str = "volume";
+const PLAYBACK_SESSION_KEY: &str = "playback_session";
+const DEFAULT_VOLUME: f64 = 1.0;
 
 const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS meta (
@@ -659,6 +662,129 @@ impl CatalogStore {
                 )
                     .await?;
                 Ok(())
+            })
+            .await
+    }
+
+    /// Load persisted volume; missing key defaults to `1.0`.
+    pub(crate) async fn volume(&self) -> Result<f64, LibraryError> {
+        self.db
+            .run(|conn| async move {
+                let mut rows = conn
+                    .query("SELECT value FROM meta WHERE key = ?1", params![VOLUME_KEY])
+                    .await?;
+                let Some(row) = rows.next().await? else {
+                    return Ok(DEFAULT_VOLUME);
+                };
+                let value = row.get::<String>(0)?;
+                value.parse::<f64>().map_err(|err| {
+                    LibraryError::Database(turso::Error::ConversionFailure(format!(
+                        "invalid volume `{value}`: {err}"
+                    )))
+                })
+            })
+            .await
+    }
+
+    /// Persist volume clamped to `[0, 1]`.
+    pub(crate) async fn set_volume(&self, volume: f64) -> Result<(), LibraryError> {
+        let volume = volume.clamp(0.0, 1.0);
+        let value = volume.to_string();
+        self.db
+            .run(|conn| {
+                let value = value.clone();
+                async move {
+                    conn.execute(
+                        "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        params![VOLUME_KEY, value.as_str()],
+                    )
+                        .await?;
+                    Ok(())
+                }
+            })
+            .await
+    }
+
+    /// Load persisted playback session; missing key is `None`.
+    ///
+    /// Corrupt JSON is cleared and treated as no session (not silently defaulted).
+    pub(crate) async fn playback_session(&self) -> Result<Option<PlaybackSession>, LibraryError> {
+        self.db
+            .run(|conn| async move {
+                let mut rows = conn
+                    .query(
+                        "SELECT value FROM meta WHERE key = ?1",
+                        params![PLAYBACK_SESSION_KEY],
+                    )
+                    .await?;
+                let Some(row) = rows.next().await? else {
+                    return Ok(None);
+                };
+                let value = row.get::<String>(0)?;
+                match PlaybackSession::from_json(&value) {
+                    Ok(session) => Ok(Some(session)),
+                    Err(_) => {
+                        conn.execute(
+                            "DELETE FROM meta WHERE key = ?1",
+                            params![PLAYBACK_SESSION_KEY],
+                        )
+                        .await?;
+                        Ok(None)
+                    }
+                }
+            })
+            .await
+    }
+
+    pub(crate) async fn set_playback_session(
+        &self,
+        session: &PlaybackSession,
+    ) -> Result<(), LibraryError> {
+        let value = session.to_json()?;
+        self.db
+            .run(|conn| {
+                let value = value.clone();
+                async move {
+                    conn.execute(
+                        "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        params![PLAYBACK_SESSION_KEY, value.as_str()],
+                    )
+                        .await?;
+                    Ok(())
+                }
+            })
+            .await
+    }
+
+    pub(crate) async fn clear_playback_session(&self) -> Result<(), LibraryError> {
+        self.db
+            .run(|conn| async move {
+                conn.execute(
+                    "DELETE FROM meta WHERE key = ?1",
+                    params![PLAYBACK_SESSION_KEY],
+                )
+                .await?;
+                Ok(())
+            })
+            .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn upsert_meta_raw(&self, key: &str, value: &str) -> Result<(), LibraryError> {
+        let key = key.to_owned();
+        let value = value.to_owned();
+        self.db
+            .run(|conn| {
+                let key = key.clone();
+                let value = value.clone();
+                async move {
+                    conn.execute(
+                        "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        params![key.as_str(), value.as_str()],
+                    )
+                        .await?;
+                    Ok(())
+                }
             })
             .await
     }

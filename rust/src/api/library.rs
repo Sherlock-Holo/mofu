@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use crate::api::player::PlaybackMode;
 use crate::api::player::TrackMetadata;
 use crate::library::{
-    Library as DomainLibrary, LibraryError, Playlist as DomainPlaylist,
-    PlaylistKind as DomainPlaylistKind, Song as DomainSong, StoredPlaybackMode,
+    Library as DomainLibrary, LibraryError, PlaybackSession as DomainPlaybackSession,
+    Playlist as DomainPlaylist, PlaylistKind as DomainPlaylistKind, Song as DomainSong,
+    StoredPlaybackMode,
 };
 
 fn map_err(err: LibraryError) -> String {
@@ -141,6 +142,38 @@ impl Library {
             .await
             .map_err(map_err)
     }
+
+    /// Load the persisted volume (defaults to `1.0`).
+    pub async fn volume(&self) -> Result<f64, String> {
+        self.inner.volume().await.map_err(map_err)
+    }
+
+    /// Persist volume clamped to `[0, 1]`.
+    pub async fn set_volume(&self, volume: f64) -> Result<(), String> {
+        self.inner.set_volume(volume).await.map_err(map_err)
+    }
+
+    /// Load the persisted playback session, if any.
+    pub async fn playback_session(&self) -> Result<Option<PlaybackSession>, String> {
+        self.inner
+            .playback_session()
+            .await
+            .map(|session| session.map(PlaybackSession::from))
+            .map_err(map_err)
+    }
+
+    /// Persist the current playback session for the next launch.
+    pub async fn set_playback_session(&self, session: PlaybackSession) -> Result<(), String> {
+        self.inner
+            .set_playback_session(session.into())
+            .await
+            .map_err(map_err)
+    }
+
+    /// Clear any persisted playback session.
+    pub async fn clear_playback_session(&self) -> Result<(), String> {
+        self.inner.clear_playback_session().await.map_err(map_err)
+    }
 }
 
 /// Playlist category for Flutter FFI.
@@ -168,6 +201,14 @@ pub struct Playlist {
     pub songs: Vec<Song>,
 }
 
+/// Persisted playback resume point for Flutter FFI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaybackSession {
+    pub playlist_id: u64,
+    pub path: String,
+    pub position_ms: u64,
+}
+
 impl From<DomainSong> for Song {
     fn from(value: DomainSong) -> Self {
         Self {
@@ -190,6 +231,26 @@ impl From<DomainPlaylist> for Playlist {
             kind,
             directory_path,
             songs: value.songs.into_iter().map(Song::from).collect(),
+        }
+    }
+}
+
+impl From<DomainPlaybackSession> for PlaybackSession {
+    fn from(value: DomainPlaybackSession) -> Self {
+        Self {
+            playlist_id: value.playlist_id,
+            path: value.path,
+            position_ms: value.position_ms,
+        }
+    }
+}
+
+impl From<PlaybackSession> for DomainPlaybackSession {
+    fn from(value: PlaybackSession) -> Self {
+        Self {
+            playlist_id: value.playlist_id,
+            path: value.path,
+            position_ms: value.position_ms,
         }
     }
 }

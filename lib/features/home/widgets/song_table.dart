@@ -82,11 +82,19 @@ class SongTable extends StatelessWidget {
                 song: song,
                 playing: playing,
                 onPlay: () {
-                  player.playPaths(paths, startIndex: index);
+                  player.playPaths(
+                    paths,
+                    startIndex: index,
+                    playlistId: playlist.id,
+                  );
                 },
                 onOpenNowPlaying: () {
                   if (!playing) {
-                    player.playPaths(paths, startIndex: index);
+                    player.playPaths(
+                      paths,
+                      startIndex: index,
+                      playlistId: playlist.id,
+                    );
                   }
                   context.go('/now-playing');
                 },

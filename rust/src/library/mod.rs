@@ -14,7 +14,7 @@ use cover_store::CoverStore;
 use directories::ProjectDirs;
 pub use error::LibraryError;
 pub(crate) use model::StoredPlaybackMode;
-pub use model::{Playlist, PlaylistId, PlaylistKind, Song};
+pub use model::{PlaybackSession, Playlist, PlaylistId, PlaylistKind, Song};
 use model::{SongId, SongRow, SongTags};
 use scan::LibraryScanner;
 use store::{CatalogStore, JsonMigrator, LyricsStore};
@@ -375,6 +375,29 @@ impl Library {
         self.catalog.set_playback_mode(mode).await
     }
 
+    pub(crate) async fn volume(&self) -> Result<f64, LibraryError> {
+        self.catalog.volume().await
+    }
+
+    pub(crate) async fn set_volume(&self, volume: f64) -> Result<(), LibraryError> {
+        self.catalog.set_volume(volume).await
+    }
+
+    pub(crate) async fn playback_session(&self) -> Result<Option<PlaybackSession>, LibraryError> {
+        self.catalog.playback_session().await
+    }
+
+    pub(crate) async fn set_playback_session(
+        &self,
+        session: PlaybackSession,
+    ) -> Result<(), LibraryError> {
+        self.catalog.set_playback_session(&session).await
+    }
+
+    pub(crate) async fn clear_playback_session(&self) -> Result<(), LibraryError> {
+        self.catalog.clear_playback_session().await
+    }
+
     fn validated_name(name: String) -> Result<String, LibraryError> {
         let name = name.trim().to_owned();
         if name.is_empty() {
@@ -679,6 +702,85 @@ mod tests {
             assert_eq!(
                 reopened.playback_mode().await.expect("repeat one"),
                 StoredPlaybackMode::RepeatOne
+            );
+        });
+    }
+
+    #[test]
+    fn volume_and_session_default_when_missing() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let library = open_test_library(&dirs).await;
+            assert_eq!(library.volume().await.expect("default volume"), 1.0);
+            assert_eq!(
+                library.playback_session().await.expect("default session"),
+                None
+            );
+        });
+    }
+
+    #[test]
+    fn volume_and_session_persist_across_reopen() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let session = PlaybackSession {
+                playlist_id: 7,
+                path: "/music/track.flac".into(),
+                position_ms: 12_345,
+            };
+            {
+                let library = open_test_library(&dirs).await;
+                library.set_volume(0.42).await.expect("set volume");
+                library
+                    .set_playback_session(session.clone())
+                    .await
+                    .expect("set session");
+                assert!((library.volume().await.expect("read volume") - 0.42).abs() < f64::EPSILON);
+                assert_eq!(
+                    library.playback_session().await.expect("read session"),
+                    Some(session.clone())
+                );
+            }
+            let reopened = open_test_library(&dirs).await;
+            assert!((reopened.volume().await.expect("reopen volume") - 0.42).abs() < f64::EPSILON);
+            assert_eq!(
+                reopened.playback_session().await.expect("reopen session"),
+                Some(session)
+            );
+            reopened
+                .set_volume(1.5)
+                .await
+                .expect("clamp volume above one");
+            assert_eq!(reopened.volume().await.expect("clamped"), 1.0);
+            reopened
+                .clear_playback_session()
+                .await
+                .expect("clear session");
+            assert_eq!(reopened.playback_session().await.expect("cleared"), None);
+        });
+    }
+
+    #[test]
+    fn corrupt_playback_session_is_cleared() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            {
+                let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
+                    .await
+                    .expect("open catalog");
+                catalog
+                    .upsert_meta_raw("playback_session", "{not-json")
+                    .await
+                    .expect("plant corrupt session");
+            }
+            let library = open_test_library(&dirs).await;
+            assert_eq!(
+                library.playback_session().await.expect("corrupt cleared"),
+                None
+            );
+            assert_eq!(
+                library.playback_session().await.expect("stays cleared"),
+                None
             );
         });
     }

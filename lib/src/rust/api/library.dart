@@ -9,7 +9,7 @@ import '../frb_generated.dart';
 import 'player.dart';
 
 // These functions are ignored because they are not marked as `pub`: `ffi_playback_mode`, `map_err`, `stored_playback_mode`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Library>>
 abstract class Library implements RustOpaqueInterface {
@@ -18,6 +18,9 @@ abstract class Library implements RustOpaqueInterface {
 
   /// Inspect and add multiple files to a virtual playlist.
   Future<BigInt> addFiles({required BigInt id, required List<String> paths});
+
+  /// Clear any persisted playback session.
+  Future<void> clearPlaybackSession();
 
   /// Create an empty user-managed playlist.
   Future<Playlist> createVirtual({required String name});
@@ -48,6 +51,9 @@ abstract class Library implements RustOpaqueInterface {
   /// Load the persisted playback mode (defaults to sequential).
   Future<PlaybackMode> playbackMode();
 
+  /// Load the persisted playback session, if any.
+  Future<PlaybackSession?> playbackSession();
+
   /// Return every directory and virtual playlist.
   Future<List<Playlist>> playlists();
 
@@ -59,6 +65,40 @@ abstract class Library implements RustOpaqueInterface {
 
   /// Persist the playback mode for the next launch.
   Future<void> setPlaybackMode({required PlaybackMode mode});
+
+  /// Persist the current playback session for the next launch.
+  Future<void> setPlaybackSession({required PlaybackSession session});
+
+  /// Persist volume clamped to `[0, 1]`.
+  Future<void> setVolume({required double volume});
+
+  /// Load the persisted volume (defaults to `1.0`).
+  Future<double> volume();
+}
+
+/// Persisted playback resume point for Flutter FFI.
+class PlaybackSession {
+  final BigInt playlistId;
+  final String path;
+  final BigInt positionMs;
+
+  const PlaybackSession({
+    required this.playlistId,
+    required this.path,
+    required this.positionMs,
+  });
+
+  @override
+  int get hashCode => playlistId.hashCode ^ path.hashCode ^ positionMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlaybackSession &&
+          runtimeType == other.runtimeType &&
+          playlistId == other.playlistId &&
+          path == other.path &&
+          positionMs == other.positionMs;
 }
 
 /// Directory-backed or user-managed playlist.

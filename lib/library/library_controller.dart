@@ -113,6 +113,51 @@ class LibraryController extends ChangeNotifier {
     await library.setPlaybackMode(mode: mode);
   }
 
+  /// 读取持久化音量；缺省为 `1.0`。
+  Future<double> loadVolume() async {
+    if (_fake) {
+      return 1;
+    }
+    final library = await _requireLibrary();
+    return library.volume();
+  }
+
+  /// 将音量写入 catalog.db（已在 Rust 侧 clamp 到 `[0, 1]`）。
+  Future<void> persistVolume(double volume) async {
+    if (_fake) {
+      return;
+    }
+    final library = await _requireLibrary();
+    await library.setVolume(volume: volume);
+  }
+
+  /// 读取持久化播放会话；无会话时为 null。
+  Future<PlaybackSession?> loadPlaybackSession() async {
+    if (_fake) {
+      return null;
+    }
+    final library = await _requireLibrary();
+    return library.playbackSession();
+  }
+
+  /// 将当前播放会话写入 catalog.db。
+  Future<void> persistPlaybackSession(PlaybackSession session) async {
+    if (_fake) {
+      return;
+    }
+    final library = await _requireLibrary();
+    await library.setPlaybackSession(session: session);
+  }
+
+  /// 清除持久化播放会话。
+  Future<void> clearPlaybackSession() async {
+    if (_fake) {
+      return;
+    }
+    final library = await _requireLibrary();
+    await library.clearPlaybackSession();
+  }
+
   void selectPlaylist(BigInt id) {
     _selectedId = id;
     notifyListeners();

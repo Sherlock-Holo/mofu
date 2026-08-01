@@ -204,3 +204,21 @@ pub(crate) struct PlaylistRow {
     pub name: String,
     pub kind: PlaylistKind,
 }
+
+/// Persisted playback resume point (playlist + track path + position).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlaybackSession {
+    pub playlist_id: PlaylistId,
+    pub path: String,
+    pub position_ms: u64,
+}
+
+impl PlaybackSession {
+    pub(crate) fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+
+    pub(crate) fn from_json(value: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(value)
+    }
+}

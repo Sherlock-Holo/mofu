@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// 草莓奶油色板与 Material 3 主题。
+/// Mofu色板与 Material 3 主题。
 abstract final class StrawberryCream {
   static const Color cream = Color(0xFFFFF7F2);
   static const Color creamDeep = Color(0xFFFFEDE3);

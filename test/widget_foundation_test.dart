@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mofu/app/theme.dart';
+import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:mofu/widgets/duration_format.dart';
 import 'package:mofu/widgets/playback_mode_button.dart';
-import 'package:mofu/src/rust/api/player.dart';
 
 void main() {
   group('DurationFormat', () {
@@ -22,10 +22,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: StrawberryCream.theme(),
-          home: const Scaffold(body: Text('草莓奶油')),
+          home: const Scaffold(body: Text('Mofu')),
         ),
       );
-      expect(find.text('草莓奶油'), findsOneWidget);
+      expect(find.text('Mofu'), findsOneWidget);
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
       expect(scaffold.backgroundColor ?? StrawberryCream.cream,
           StrawberryCream.cream);

@@ -3,14 +3,16 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
-import 'api/library.dart';
-import 'api/player.dart';
-import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
-import 'frb_generated.dart';
+
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
+
+import 'api/library.dart';
+import 'api/player.dart';
+import 'api/simple.dart';
+import 'frb_generated.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -64,6 +66,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   CoverArt dco_decode_box_autoadd_cover_art(dynamic raw);
+
+  @protected
+  PlaybackSession dco_decode_box_autoadd_playback_session(dynamic raw);
 
   @protected
   TrackMetadata dco_decode_box_autoadd_track_metadata(dynamic raw);
@@ -129,6 +134,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoverArt? dco_decode_opt_box_autoadd_cover_art(dynamic raw);
 
   @protected
+  PlaybackSession? dco_decode_opt_box_autoadd_playback_session(dynamic raw);
+
+  @protected
   TrackMetadata? dco_decode_opt_box_autoadd_track_metadata(dynamic raw);
 
   @protected
@@ -142,6 +150,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlaybackMode dco_decode_playback_mode(dynamic raw);
+
+  @protected
+  PlaybackSession dco_decode_playback_session(dynamic raw);
 
   @protected
   PlayerSnapshot dco_decode_player_snapshot(dynamic raw);
@@ -219,6 +230,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoverArt sse_decode_box_autoadd_cover_art(SseDeserializer deserializer);
 
   @protected
+  PlaybackSession sse_decode_box_autoadd_playback_session(
+      SseDeserializer deserializer);
+
+  @protected
   TrackMetadata sse_decode_box_autoadd_track_metadata(
       SseDeserializer deserializer);
 
@@ -284,6 +299,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoverArt? sse_decode_opt_box_autoadd_cover_art(SseDeserializer deserializer);
 
   @protected
+  PlaybackSession? sse_decode_opt_box_autoadd_playback_session(
+      SseDeserializer deserializer);
+
+  @protected
   TrackMetadata? sse_decode_opt_box_autoadd_track_metadata(
       SseDeserializer deserializer);
 
@@ -299,6 +318,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlaybackMode sse_decode_playback_mode(SseDeserializer deserializer);
+
+  @protected
+  PlaybackSession sse_decode_playback_session(SseDeserializer deserializer);
 
   @protected
   PlayerSnapshot sse_decode_player_snapshot(SseDeserializer deserializer);
@@ -377,6 +399,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       CoverArt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_playback_session(
+      PlaybackSession self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_track_metadata(
       TrackMetadata self, SseSerializer serializer);
 
@@ -446,6 +472,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       CoverArt? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_playback_session(
+      PlaybackSession? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_box_autoadd_track_metadata(
       TrackMetadata? self, SseSerializer serializer);
 
@@ -461,6 +491,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_playback_mode(PlaybackMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_playback_session(
+      PlaybackSession self, SseSerializer serializer);
 
   @protected
   void sse_encode_player_snapshot(

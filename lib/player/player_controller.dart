@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:mofu/src/rust/api/library.dart' show PlaybackSession;
 import 'package:mofu/src/rust/api/player.dart';
 
 /// 轮询 Rust [Player] 快照并转发播放控制。
@@ -33,7 +34,21 @@ class PlayerController extends ChangeNotifier {
   /// 用户切换播放模式时异步写库；启动恢复时不要挂副作用。
   Future<void> Function(PlaybackMode mode)? persistPlaybackMode;
 
+  /// 音量 trailing debounce 写库；启动恢复时不要挂副作用。
+  Future<void> Function(double volume)? persistVolume;
+
+  /// 切歌 / 暂停 / 退出时写播放会话。
+  Future<void> Function(PlaybackSession session)? persistPlaybackSession;
+
+  /// 无有效队列或曲目时清除持久化会话。
+  Future<void> Function()? clearPlaybackSession;
+
+  /// 当前队列来源播放列表；用于会话恢复。
+  BigInt? sourcePlaylistId;
+
   Timer? _pollTimer;
+  Timer? _volumePersistTimer;
+  double? _pendingVolume;
   PlayerSnapshot? _snapshot;
   String? _error;
   bool _disposed = false;
@@ -49,6 +64,20 @@ class PlayerController extends ChangeNotifier {
       _snapshot?.playbackMode ?? PlaybackMode.sequential;
   BigInt? get currentIndex => _snapshot?.currentIndex;
   List<QueueItem> get queue => _snapshot?.queue ?? const [];
+
+  /// 当前播放项路径；无队列或无选中项时为 null。
+  String? get currentPath {
+    final index = currentIndex;
+    if (index == null) {
+      return null;
+    }
+    for (final item in queue) {
+      if (item.index == index) {
+        return item.path;
+      }
+    }
+    return null;
+  }
 
   /// 空闲快照，供假控制器与测试夹具复用。
   static PlayerSnapshot idleSnapshot({
@@ -77,8 +106,10 @@ class PlayerController extends ChangeNotifier {
   /// 测试用：直接写入快照并通知监听者。
   @visibleForTesting
   void emitSnapshot(PlayerSnapshot snapshot) {
+    final previous = _snapshot;
     _snapshot = snapshot;
     _error = null;
+    _observeSessionTriggers(previous);
     notifyListeners();
   }
 
@@ -87,9 +118,11 @@ class PlayerController extends ChangeNotifier {
       return;
     }
     try {
+      final previous = _snapshot;
       final next = _player!.snapshot();
-      final changed = _snapshot != next;
+      final changed = previous != next;
       _snapshot = next;
+      _observeSessionTriggers(previous);
       if (_error != null) {
         _error = null;
         notifyListeners();
@@ -104,11 +137,43 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
+  /// 切歌（含自动下一首）或 playing→paused 时写会话；播放中进度变化不写。
+  void _observeSessionTriggers(PlayerSnapshot? previous) {
+    final next = _snapshot;
+    if (previous == null || next == null) {
+      return;
+    }
+    final prevPath = _pathOf(previous);
+    final nextPath = _pathOf(next);
+    final trackChanged =
+        previous.currentIndex != next.currentIndex || prevPath != nextPath;
+    final pausedFromPlaying = previous.state == PlayerState.playing &&
+        next.state == PlayerState.paused;
+    if (trackChanged || pausedFromPlaying) {
+      persistCurrentSession();
+    }
+  }
+
+  String? _pathOf(PlayerSnapshot snapshot) {
+    final index = snapshot.currentIndex;
+    if (index == null) {
+      return null;
+    }
+    for (final item in snapshot.queue) {
+      if (item.index == index) {
+        return item.path;
+      }
+    }
+    return null;
+  }
+
   void _run(void Function() action) {
+    final previous = _snapshot;
     if (_fake) {
       try {
         action();
         _error = null;
+        _observeSessionTriggers(previous);
         notifyListeners();
       } catch (err) {
         _error = err.toString();
@@ -240,10 +305,10 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
-  void setVolume(double volume) => _run(() {
+  void setVolume(double volume, {bool persist = true}) => _run(() {
+        final clamped = volume.clamp(0.0, 1.0);
         if (_fake) {
           final current = _snapshot ?? idleSnapshot();
-          final clamped = volume.clamp(0.0, 1.0);
           _snapshot = PlayerSnapshot(
             positionMs: current.positionMs,
             durationMs: current.durationMs,
@@ -254,10 +319,64 @@ class PlayerController extends ChangeNotifier {
             queue: current.queue,
             metadata: current.metadata,
           );
-          return;
+        } else {
+          _player!.setVolume(volume: volume);
         }
-        _player!.setVolume(volume: volume);
+        if (persist) {
+          _scheduleVolumePersist(clamped);
+        }
       });
+
+  void _scheduleVolumePersist(double volume) {
+    _pendingVolume = volume;
+    _volumePersistTimer?.cancel();
+    _volumePersistTimer = Timer(const Duration(milliseconds: 400), () {
+      final pending = _pendingVolume;
+      _pendingVolume = null;
+      _volumePersistTimer = null;
+      final persist = persistVolume;
+      if (pending != null && persist != null) {
+        unawaited(persist(pending));
+      }
+    });
+  }
+
+  /// 退出 / 进后台时立刻落盘尚未 debounce 的音量。
+  void flushVolumePersist() {
+    _volumePersistTimer?.cancel();
+    _volumePersistTimer = null;
+    final pending = _pendingVolume;
+    _pendingVolume = null;
+    final persist = persistVolume;
+    if (pending != null && persist != null) {
+      unawaited(persist(pending));
+    }
+  }
+
+  /// 将当前会话写入库；无有效 path / playlist 时清除。
+  void persistCurrentSession() {
+    final playlistId = sourcePlaylistId;
+    final path = currentPath;
+    if (playlistId == null || path == null || queue.isEmpty) {
+      final clear = clearPlaybackSession;
+      if (clear != null) {
+        unawaited(clear());
+      }
+      return;
+    }
+    final persist = persistPlaybackSession;
+    if (persist != null) {
+      unawaited(
+        persist(
+          PlaybackSession(
+            playlistId: playlistId,
+            path: path,
+            positionMs: positionMs,
+          ),
+        ),
+      );
+    }
+  }
 
   void setPlaybackMode(PlaybackMode mode, {bool persist = true}) => _run(() {
         if (_fake) {
@@ -287,40 +406,45 @@ class PlayerController extends ChangeNotifier {
     required List<String> paths,
     BigInt? startIndex,
     bool autoplay = true,
-  }) =>
-      _run(() {
-        if (_fake) {
-          final queue = <QueueItem>[
-            for (var i = 0; i < paths.length; i++)
-              QueueItem(index: BigInt.from(i), path: paths[i]),
-          ];
-          BigInt? index;
-          if (queue.isNotEmpty) {
-            final raw = startIndex?.toInt() ?? 0;
-            final clamped = raw.clamp(0, queue.length - 1);
-            index = BigInt.from(clamped);
-          }
-          final current = _snapshot ?? idleSnapshot();
-          _snapshot = PlayerSnapshot(
-            positionMs: BigInt.zero,
-            durationMs: current.durationMs,
-            state: autoplay && index != null
-                ? PlayerState.playing
-                : PlayerState.ready,
-            volume: current.volume,
-            playbackMode: current.playbackMode,
-            currentIndex: index,
-            queue: queue,
-            metadata: current.metadata,
-          );
-          return;
+    BigInt? playlistId,
+  }) {
+    if (playlistId != null) {
+      sourcePlaylistId = playlistId;
+    }
+    _run(() {
+      if (_fake) {
+        final queue = <QueueItem>[
+          for (var i = 0; i < paths.length; i++)
+            QueueItem(index: BigInt.from(i), path: paths[i]),
+        ];
+        BigInt? index;
+        if (queue.isNotEmpty) {
+          final raw = startIndex?.toInt() ?? 0;
+          final clamped = raw.clamp(0, queue.length - 1);
+          index = BigInt.from(clamped);
         }
-        _player!.setQueue(
-          paths: paths,
-          startIndex: startIndex,
-          autoplay: autoplay,
+        final current = _snapshot ?? idleSnapshot();
+        _snapshot = PlayerSnapshot(
+          positionMs: BigInt.zero,
+          durationMs: current.durationMs,
+          state: autoplay && index != null
+              ? PlayerState.playing
+              : PlayerState.ready,
+          volume: current.volume,
+          playbackMode: current.playbackMode,
+          currentIndex: index,
+          queue: queue,
+          metadata: current.metadata,
         );
-      });
+        return;
+      }
+      _player!.setQueue(
+        paths: paths,
+        startIndex: startIndex,
+        autoplay: autoplay,
+      );
+    });
+  }
 
   void playIndex(BigInt index) => _run(() {
         if (_fake) {
@@ -345,7 +469,11 @@ class PlayerController extends ChangeNotifier {
       });
 
   /// 用整份列表路径替换队列并播放指定项。
-  void playPaths(List<String> paths, {required int startIndex}) {
+  void playPaths(
+    List<String> paths, {
+    required int startIndex,
+    BigInt? playlistId,
+  }) {
     if (paths.isEmpty) {
       return;
     }
@@ -354,12 +482,13 @@ class PlayerController extends ChangeNotifier {
       paths: paths,
       startIndex: BigInt.from(clamped),
       autoplay: true,
+      playlistId: playlistId,
     );
   }
 
   /// 播放列表全部曲目。随机模式下 Rust 会先打乱队列再从第一首顺序播放。
-  void playAll(List<String> paths) {
-    playPaths(paths, startIndex: 0);
+  void playAll(List<String> paths, {BigInt? playlistId}) {
+    playPaths(paths, startIndex: 0, playlistId: playlistId);
   }
 
   void _stepQueue(int delta) {
@@ -387,6 +516,8 @@ class PlayerController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _pollTimer?.cancel();
+    _volumePersistTimer?.cancel();
+    _volumePersistTimer = null;
     if (_ownsPlayer) {
       _player?.dispose();
     }
