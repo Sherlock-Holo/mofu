@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -291,6 +292,10 @@ impl DecodeWorker {
 
         let packet = match active.decode_next_packet() {
             Ok(packet) => packet,
+            Err(err) if is_unexpected_eof(&err) => {
+                self.on_track_ended();
+                return;
+            }
             Err(err) => {
                 error!(%err, "decode failed");
                 self.progress.set_state(PlaybackState::Paused);
@@ -354,4 +359,8 @@ impl DecodeWorker {
             self.progress.set_state(PlaybackState::Ended);
         }
     }
+}
+
+fn is_unexpected_eof(err: &PlayerError) -> bool {
+    matches!(err, PlayerError::Io(io_err) if io_err.kind() == ErrorKind::UnexpectedEof)
 }

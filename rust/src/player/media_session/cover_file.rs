@@ -2,7 +2,7 @@
 
 use std::env;
 use std::fs;
-use std::io;
+use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
 use super::super::metadata::CoverArt;
@@ -47,7 +47,7 @@ impl CoverFileCache {
         if let Some(path) = self.path.take() {
             match fs::remove_file(&path) {
                 Ok(()) => Ok(()),
-                Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
                 Err(err) => Err(err),
             }
         } else {

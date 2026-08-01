@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::ErrorKind;
 use std::path::Path;
 use std::time::Duration;
 
@@ -149,9 +150,14 @@ impl DecoderSession {
     /// Decode one packet worth of interleaved f32 samples, applying seek trim when needed.
     pub(crate) fn decode_next_packet(&mut self) -> Result<DecodePacket, PlayerError> {
         loop {
-            let packet = match self.format.next_packet()? {
-                Some(packet) => packet,
-                None => return Ok(DecodePacket::Ended),
+            // Some containers signal EOF via Io UnexpectedEof instead of Ok(None).
+            let packet = match self.format.next_packet() {
+                Ok(Some(packet)) => packet,
+                Ok(None) => return Ok(DecodePacket::Ended),
+                Err(SymphoniaError::IoError(err)) if err.kind() == ErrorKind::UnexpectedEof => {
+                    return Ok(DecodePacket::Ended);
+                }
+                Err(err) => return Err(err.into()),
             };
 
             if packet.track_id != self.track_id {
@@ -161,6 +167,9 @@ impl DecoderSession {
             let decoded = match self.decoder.decode(&packet) {
                 Ok(decoded) => decoded,
                 Err(SymphoniaError::DecodeError(_)) => continue,
+                Err(SymphoniaError::IoError(err)) if err.kind() == ErrorKind::UnexpectedEof => {
+                    return Ok(DecodePacket::Ended);
+                }
                 Err(err) => return Err(err.into()),
             };
 
