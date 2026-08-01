@@ -1,3 +1,3 @@
 pub mod library;
 pub mod player;
-pub mod simple;
+pub mod setup;
