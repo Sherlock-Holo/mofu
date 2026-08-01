@@ -10,6 +10,7 @@ mod decoder;
 mod error;
 mod format;
 mod inspector;
+mod media_session;
 pub mod metadata;
 mod output;
 mod queue;
@@ -26,6 +27,7 @@ pub use command::PlayerCommand;
 use crossbeam_channel::Sender;
 pub use error::PlayerError;
 pub use inspector::{MediaInspection, MediaInspector, SymphoniaMediaInspector};
+use media_session::MediaSession;
 use metadata::TrackMetadata;
 pub use queue::{PlaybackMode, QueueSnapshot};
 use state::SharedProgress;
@@ -40,6 +42,7 @@ pub(crate) struct Player {
     cmd_tx: Sender<PlayerCommand>,
     progress: Arc<SharedProgress>,
     worker: Option<JoinHandle<()>>,
+    media_session: Option<MediaSession>,
 }
 
 impl Player {
@@ -48,10 +51,12 @@ impl Player {
         let (cmd_tx, cmd_rx) = crossbeam_channel::bounded::<PlayerCommand>(32);
         let progress = Arc::new(SharedProgress::new());
         let worker = DecodeWorker::spawn(cmd_rx, progress.clone());
+        let media_session = MediaSession::try_attach(cmd_tx.clone(), progress.clone());
         Self {
             cmd_tx,
             progress,
             worker: Some(worker),
+            media_session,
         }
     }
 
@@ -178,6 +183,9 @@ impl Default for Player {
 
 impl Drop for Player {
     fn drop(&mut self) {
+        // Tear down the OS session before shutting down the worker so late
+        // media-key events do not race a closed command channel.
+        self.media_session.take();
         let _ = self.cmd_tx.send(PlayerCommand::Shutdown);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
