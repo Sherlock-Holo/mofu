@@ -30,6 +30,9 @@ class PlayerController extends ChangeNotifier {
   final bool _ownsPlayer;
   final bool _fake;
 
+  /// 用户切换播放模式时异步写库；启动恢复时不要挂副作用。
+  Future<void> Function(PlaybackMode mode)? persistPlaybackMode;
+
   Timer? _pollTimer;
   PlayerSnapshot? _snapshot;
   String? _error;
@@ -256,7 +259,7 @@ class PlayerController extends ChangeNotifier {
         _player!.setVolume(volume: volume);
       });
 
-  void setPlaybackMode(PlaybackMode mode) => _run(() {
+  void setPlaybackMode(PlaybackMode mode, {bool persist = true}) => _run(() {
         if (_fake) {
           final current = _snapshot ?? idleSnapshot();
           _snapshot = PlayerSnapshot(
@@ -269,9 +272,15 @@ class PlayerController extends ChangeNotifier {
             queue: current.queue,
             metadata: current.metadata,
           );
-          return;
+        } else {
+          _player!.setPlaybackMode(mode: mode);
         }
-        _player!.setPlaybackMode(mode: mode);
+        if (persist) {
+          final persistMode = persistPlaybackMode;
+          if (persistMode != null) {
+            unawaited(persistMode(mode));
+          }
+        }
       });
 
   void setQueue({

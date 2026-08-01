@@ -26,7 +26,7 @@ Local music player.
 | Bridge | flutter_rust_bridge 2.12 |
 | Audio decoding | [Symphonia](https://github.com/pdeljanov/Symphonia) |
 | Audio output | [CPAL](https://github.com/RustAudio/cpal) |
-| Library persistence | JSON manifest (`library.json`) |
+| Library persistence | Turso (`catalog.db` / `lyrics.db`) + cover cache |
 | Languages | Dart, Rust (Edition 2024) |
 
 ## Architecture
@@ -138,10 +138,16 @@ Actual decoding is provided by Symphonia; refer to its documentation for codec s
 
 ## Data storage
 
-The library manifest is stored by default as `library.json` in the platform application data directory:
+Library persistence is split across XDG locations:
+
+| Content | Default location (Linux) |
+|---------|--------------------------|
+| `catalog.db` / `lyrics.db` | `~/.local/share/mofu/` (app data dir) |
+| Cover cache `covers/` | `~/.cache/mofu/covers/` (app cache dir) |
 
 - Application ID: `dev.mofu.mofu`
-- Use `Library::new_at` to specify a custom data directory (tests and integration scenarios)
+- Use `Library::new_at` for a custom **data** directory; covers still use the platform cache
+- If a legacy `library.json` is present and the catalog is empty, it is migrated once and renamed to `library.json.migrated`
 
 ## Platform support
 

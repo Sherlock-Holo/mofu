@@ -1,12 +1,13 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mofu/src/rust/api/library.dart';
+import 'package:mofu/src/rust/api/player.dart' show PlaybackMode;
 
 /// 曲库列表状态与目录/文件导入动作。
 class LibraryController extends ChangeNotifier {
   LibraryController({Library? library})
-      : _library = library ?? Library(),
-        _ownsLibrary = true,
+      : _library = library,
+        _ownsLibrary = library == null,
         _fake = false;
 
   /// 不连接 Rust，供 Widget 与 integration 测试注入。
@@ -22,7 +23,7 @@ class LibraryController extends ChangeNotifier {
     _ensureSelection();
   }
 
-  final Library? _library;
+  Library? _library;
   final bool _ownsLibrary;
   final bool _fake;
 
@@ -67,6 +68,10 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Library> _requireLibrary() async {
+    return _library ??= await Library.newInstance();
+  }
+
   Future<void> load() async {
     if (_fake) {
       _loading = false;
@@ -79,7 +84,8 @@ class LibraryController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      _playlists = _library!.playlists();
+      final library = await _requireLibrary();
+      _playlists = await library.playlists();
       _ensureSelection();
     } catch (err) {
       _error = err.toString();
@@ -87,6 +93,24 @@ class LibraryController extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  /// 读取持久化的播放模式；缺省为顺序播放。
+  Future<PlaybackMode> loadPlaybackMode() async {
+    if (_fake) {
+      return PlaybackMode.sequential;
+    }
+    final library = await _requireLibrary();
+    return library.playbackMode();
+  }
+
+  /// 将播放模式写入 catalog.db。
+  Future<void> persistPlaybackMode(PlaybackMode mode) async {
+    if (_fake) {
+      return;
+    }
+    final library = await _requireLibrary();
+    await library.setPlaybackMode(mode: mode);
   }
 
   void selectPlaylist(BigInt id) {
@@ -113,7 +137,8 @@ class LibraryController extends ChangeNotifier {
     try {
       await action();
       if (!_fake) {
-        _playlists = _library!.playlists();
+        final library = await _requireLibrary();
+        _playlists = await library.playlists();
       }
       _ensureSelection();
     } catch (err) {
@@ -142,7 +167,8 @@ class LibraryController extends ChangeNotifier {
         _selectedId = created.id;
         return;
       }
-      final created = _library!.createVirtual(name: trimmed);
+      final library = await _requireLibrary();
+      final created = await library.createVirtual(name: trimmed);
       _selectedId = created.id;
     });
   }
@@ -169,7 +195,8 @@ class LibraryController extends ChangeNotifier {
         ];
         return;
       }
-      _library!.renameVirtual(id: id, name: trimmed);
+      final library = await _requireLibrary();
+      await library.renameVirtual(id: id, name: trimmed);
     });
   }
 
@@ -185,7 +212,8 @@ class LibraryController extends ChangeNotifier {
         }
         return;
       }
-      _library!.deleteVirtual(id: id);
+      final library = await _requireLibrary();
+      await library.deleteVirtual(id: id);
       if (_selectedId == id) {
         _selectedId = null;
       }
@@ -205,7 +233,8 @@ class LibraryController extends ChangeNotifier {
       if (_fake) {
         return;
       }
-      await _library!.refresh(id: id);
+      final library = await _requireLibrary();
+      await library.refresh(id: id);
     });
   }
 
@@ -221,7 +250,8 @@ class LibraryController extends ChangeNotifier {
       return;
     }
     await _mutate(() async {
-      final created = await _library!.addDirectory(path: path);
+      final library = await _requireLibrary();
+      final created = await library.addDirectory(path: path);
       _selectedId = created.id;
     });
   }
@@ -264,12 +294,13 @@ class LibraryController extends ChangeNotifier {
     }
 
     await _mutate(() async {
+      final library = await _requireLibrary();
       var target = selectedPlaylist;
       if (target == null || target.kind != PlaylistKind.virtual) {
-        target = _library!.createVirtual(name: '导入的歌曲');
+        target = await library.createVirtual(name: '导入的歌曲');
         _selectedId = target.id;
       }
-      await _library!.addFiles(id: target.id, paths: paths);
+      await library.addFiles(id: target.id, paths: paths);
     });
   }
 
@@ -308,7 +339,8 @@ class LibraryController extends ChangeNotifier {
         ];
         return;
       }
-      _library!.importFromPlaylist(
+      final library = await _requireLibrary();
+      await library.importFromPlaylist(
         targetId: targetId,
         sourceId: sourceId,
         paths: paths,

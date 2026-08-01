@@ -96,6 +96,11 @@ impl PlaybackQueue {
             self.restart_from_start_on_next = false;
             return None;
         }
+        if self.restart_from_start_on_next {
+            self.restart_from_start_on_next = false;
+            self.current_index = Some(0);
+            return self.current_path().cloned();
+        }
         let current = self.current_index.unwrap_or(0).min(self.paths.len() - 1);
         let next = match self.mode {
             PlaybackMode::RepeatOne if ended => current,

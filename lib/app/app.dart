@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mofu/app/router.dart';
 import 'package:mofu/app/theme.dart';
@@ -34,8 +36,22 @@ class _MofuAppState extends State<MofuApp> {
     super.initState();
     _ownsLibrary = widget.libraryController == null;
     _ownsPlayer = widget.playerController == null;
+    _player.persistPlaybackMode = _library.persistPlaybackMode;
     _player.start();
-    _library.load();
+    unawaited(_bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    await _library.load();
+    try {
+      final mode = await _library.loadPlaybackMode();
+      if (!mounted) {
+        return;
+      }
+      _player.setPlaybackMode(mode, persist: false);
+    } catch (_) {
+      // 曲库已加载；模式恢复失败时保持默认顺序播放。
+    }
   }
 
   @override

@@ -26,7 +26,7 @@
 | 桥接 | flutter_rust_bridge 2.12 |
 | 音频解码 | [Symphonia](https://github.com/pdeljanov/Symphonia) |
 | 音频输出 | [CPAL](https://github.com/RustAudio/cpal) |
-| 曲库持久化 | JSON manifest（`library.json`） |
+| 曲库持久化 | Turso（`catalog.db` / `lyrics.db`）+ 封面 cache |
 | 语言 | Dart、Rust（Edition 2024） |
 
 ## 架构
@@ -136,10 +136,16 @@ flutter_rust_bridge_codegen generate
 
 ## 数据存储
 
-曲库清单默认保存在各平台应用数据目录下的 `library.json`：
+曲库持久化按 XDG 拆分：
+
+| 内容 | 默认位置（Linux） |
+|------|-------------------|
+| `catalog.db` / `lyrics.db` | `~/.local/share/mofu/`（应用 data 目录） |
+| 封面缓存 `covers/` | `~/.cache/mofu/covers/`（应用 cache 目录） |
 
 - 应用 ID：`dev.mofu.mofu`
-- 可通过 `Library::new_at` 指定自定义数据目录（测试与集成场景）
+- 可通过 `Library::new_at` 指定自定义 **数据** 目录；封面仍使用平台 cache
+- 若目录中仍有旧版 `library.json` 且 catalog 为空，启动时会一次性迁移并重命名为 `library.json.migrated`
 
 ## 平台支持
 

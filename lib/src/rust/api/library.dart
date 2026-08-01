@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import '../frb_generated.dart';
 import 'player.dart';
 
-// These functions are ignored because they are not marked as `pub`: `map_err`
+// These functions are ignored because they are not marked as `pub`: `ffi_playback_mode`, `map_err`, `stored_playback_mode`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Library>>
@@ -20,34 +20,45 @@ abstract class Library implements RustOpaqueInterface {
   Future<BigInt> addFiles({required BigInt id, required List<String> paths});
 
   /// Create an empty user-managed playlist.
-  Playlist createVirtual({required String name});
+  Future<Playlist> createVirtual({required String name});
 
   /// Delete a virtual playlist.
-  void deleteVirtual({required BigInt id});
+  Future<void> deleteVirtual({required BigInt id});
 
   /// Import selected paths from one playlist into a virtual playlist.
   ///
   /// An empty path list imports every song in the source playlist.
-  BigInt importFromPlaylist(
+  Future<BigInt> importFromPlaylist(
       {required BigInt targetId,
       required BigInt sourceId,
       required List<String> paths});
 
+  // HINT: Make it `#[frb(sync)]` to let it become the default constructor of Dart class.
   /// Open the library in the platform application data directory.
-  factory Library() => RustLib.instance.api.crateApiLibraryLibraryNew();
+  static Future<Library> newInstance() =>
+      RustLib.instance.api.crateApiLibraryLibraryNew();
 
   /// Open the library under an explicit data directory.
-  static Library newAt({required String dataDirectory}) => RustLib.instance.api
-      .crateApiLibraryLibraryNewAt(dataDirectory: dataDirectory);
+  ///
+  /// Cover art still uses the platform XDG cache directory.
+  static Future<Library> newAt({required String dataDirectory}) =>
+      RustLib.instance.api
+          .crateApiLibraryLibraryNewAt(dataDirectory: dataDirectory);
+
+  /// Load the persisted playback mode (defaults to sequential).
+  Future<PlaybackMode> playbackMode();
 
   /// Return every directory and virtual playlist.
-  List<Playlist> playlists();
+  Future<List<Playlist>> playlists();
 
   /// Rescan a directory playlist or drop invalid virtual-list paths.
   Future<Playlist> refresh({required BigInt id});
 
   /// Rename a virtual playlist.
-  void renameVirtual({required BigInt id, required String name});
+  Future<void> renameVirtual({required BigInt id, required String name});
+
+  /// Persist the playback mode for the next launch.
+  Future<void> setPlaybackMode({required PlaybackMode mode});
 }
 
 /// Directory-backed or user-managed playlist.

@@ -22,6 +22,10 @@ directories = "6.0.0"
 rayon = "1.12.0"
 rand = "0.10.2"
 souvlaki = "0.8.3"
+turso = "0.7.2"
+
+[dev-dependencies]
+futures-executor = "0.3.33"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [
