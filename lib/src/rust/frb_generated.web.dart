@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/library.dart';
 import 'api/player.dart';
 import 'api/simple.dart';
 import 'dart:async';
@@ -21,8 +22,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     required super.portManager,
   });
 
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LibraryPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary;
+
   CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_PlayerPtr => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer;
+
+  @protected
+  Library
+      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          dynamic raw);
 
   @protected
   Player
@@ -30,8 +39,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
           dynamic raw);
 
   @protected
+  Library
+      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          dynamic raw);
+
+  @protected
   Player
       dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+          dynamic raw);
+
+  @protected
+  Library
+      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
           dynamic raw);
 
   @protected
@@ -41,6 +60,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String dco_decode_String(dynamic raw);
+
+  @protected
+  bool dco_decode_bool(dynamic raw);
 
   @protected
   CoverArt dco_decode_box_autoadd_cover_art(dynamic raw);
@@ -58,7 +80,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoverArt dco_decode_cover_art(dynamic raw);
 
   @protected
+  double dco_decode_f_64(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
 
   @protected
   List<Lyrics> dco_decode_list_lyrics(dynamic raw);
@@ -67,7 +98,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LyricsLine> dco_decode_list_lyrics_line(dynamic raw);
 
   @protected
+  List<Playlist> dco_decode_list_playlist(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  List<QueueItem> dco_decode_list_queue_item(dynamic raw);
+
+  @protected
+  List<Song> dco_decode_list_song(dynamic raw);
 
   @protected
   Lyrics dco_decode_lyrics(dynamic raw);
@@ -103,7 +143,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LyricsLine>? dco_decode_opt_list_lyrics_line(dynamic raw);
 
   @protected
+  PlaybackMode dco_decode_playback_mode(dynamic raw);
+
+  @protected
+  PlayerSnapshot dco_decode_player_snapshot(dynamic raw);
+
+  @protected
   PlayerState dco_decode_player_state(dynamic raw);
+
+  @protected
+  Playlist dco_decode_playlist(dynamic raw);
+
+  @protected
+  PlaylistKind dco_decode_playlist_kind(dynamic raw);
+
+  @protected
+  QueueItem dco_decode_queue_item(dynamic raw);
+
+  @protected
+  Song dco_decode_song(dynamic raw);
 
   @protected
   TrackMetadata dco_decode_track_metadata(dynamic raw);
@@ -124,13 +182,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
+  Library
+      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          SseDeserializer deserializer);
+
+  @protected
   Player
       sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
           SseDeserializer deserializer);
 
   @protected
+  Library
+      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          SseDeserializer deserializer);
+
+  @protected
   Player
       sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+          SseDeserializer deserializer);
+
+  @protected
+  Library
+      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
           SseDeserializer deserializer);
 
   @protected
@@ -140,6 +213,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
   CoverArt sse_decode_box_autoadd_cover_art(SseDeserializer deserializer);
@@ -158,7 +234,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoverArt sse_decode_cover_art(SseDeserializer deserializer);
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
   List<Lyrics> sse_decode_list_lyrics(SseDeserializer deserializer);
@@ -167,7 +252,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LyricsLine> sse_decode_list_lyrics_line(SseDeserializer deserializer);
 
   @protected
+  List<Playlist> sse_decode_list_playlist(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  List<QueueItem> sse_decode_list_queue_item(SseDeserializer deserializer);
+
+  @protected
+  List<Song> sse_decode_list_song(SseDeserializer deserializer);
 
   @protected
   Lyrics sse_decode_lyrics(SseDeserializer deserializer);
@@ -206,7 +300,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  PlaybackMode sse_decode_playback_mode(SseDeserializer deserializer);
+
+  @protected
+  PlayerSnapshot sse_decode_player_snapshot(SseDeserializer deserializer);
+
+  @protected
   PlayerState sse_decode_player_state(SseDeserializer deserializer);
+
+  @protected
+  Playlist sse_decode_playlist(SseDeserializer deserializer);
+
+  @protected
+  PlaylistKind sse_decode_playlist_kind(SseDeserializer deserializer);
+
+  @protected
+  QueueItem sse_decode_queue_item(SseDeserializer deserializer);
+
+  @protected
+  Song sse_decode_song(SseDeserializer deserializer);
 
   @protected
   TrackMetadata sse_decode_track_metadata(SseDeserializer deserializer);
@@ -227,7 +339,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_usize(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+  void
+      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          Library self, SseSerializer serializer);
 
   @protected
   void
@@ -236,8 +350,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void
+      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          Library self, SseSerializer serializer);
+
+  @protected
+  void
       sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
           Player self, SseSerializer serializer);
+
+  @protected
+  void
+      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          Library self, SseSerializer serializer);
 
   @protected
   void
@@ -246,6 +370,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_cover_art(
@@ -265,7 +392,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_cover_art(CoverArt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_lyrics(List<Lyrics> self, SseSerializer serializer);
@@ -275,8 +411,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       List<LyricsLine> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_playlist(List<Playlist> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
       Uint8List self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_queue_item(
+      List<QueueItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_song(List<Song> self, SseSerializer serializer);
 
   @protected
   void sse_encode_lyrics(Lyrics self, SseSerializer serializer);
@@ -316,7 +462,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       List<LyricsLine>? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_playback_mode(PlaybackMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_player_snapshot(
+      PlayerSnapshot self, SseSerializer serializer);
+
+  @protected
   void sse_encode_player_state(PlayerState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_playlist(Playlist self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_playlist_kind(PlaylistKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_queue_item(QueueItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_song(Song self, SseSerializer serializer);
 
   @protected
   void sse_encode_track_metadata(TrackMetadata self, SseSerializer serializer);
@@ -335,15 +500,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
 }
 
 // Section: wire_class
 
 class RustLibWire implements BaseWire {
   RustLibWire.fromExternalLibrary(ExternalLibrary lib);
+
+  void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          int ptr) =>
+      wasmModule
+          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+              ptr);
+
+  void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          int ptr) =>
+      wasmModule
+          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+              ptr);
 
   void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
           int ptr) =>
@@ -364,6 +538,14 @@ external RustLibWasmModule get wasmModule;
 @JS()
 @anonymous
 extension type RustLibWasmModule._(JSObject _) implements JSObject {
+  external void
+      rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          int ptr);
+
+  external void
+      rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
+          int ptr);
+
   external void
       rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
           int ptr);

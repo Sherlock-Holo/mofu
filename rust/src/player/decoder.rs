@@ -85,10 +85,11 @@ impl DecoderSession {
         let decoder = default::get_codecs()
             .make_audio_decoder(&codec_params, &AudioDecoderOptions::default())?;
 
-        let metadata = match format.metadata().skip_to_latest() {
+        let mut metadata = match format.metadata().skip_to_latest() {
             Some(revision) => RevisionMetadata::new(revision, track_id).to_track_metadata(),
             None => TrackMetadata::default(),
         };
+        metadata.load_sidecar_lyrics(path);
 
         Ok(Self {
             format,

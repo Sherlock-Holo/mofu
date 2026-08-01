@@ -21,6 +21,8 @@ pub enum PlayerError {
     CommandChannelClosed,
     #[error("invalid seek position")]
     InvalidSeek,
+    #[error("queue index is out of range")]
+    InvalidQueueIndex,
 }
 
 /// Demux/decode failures that are not plain I/O or media-open rejection.

@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `map_err`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Player>>
 abstract class Player implements RustOpaqueInterface {
@@ -20,6 +20,9 @@ abstract class Player implements RustOpaqueInterface {
   /// Create a player and start its decode worker thread.
   factory Player() => RustLib.instance.api.crateApiPlayerPlayerNew();
 
+  /// Start the next queue item when available.
+  void next();
+
   /// Open a local audio file. Does not start playback.
   void open({required String path});
 
@@ -29,11 +32,35 @@ abstract class Player implements RustOpaqueInterface {
   /// Start or resume playback.
   void play();
 
+  /// Select and start one queue item.
+  void playIndex({required BigInt index});
+
   /// Current playback position in milliseconds.
   BigInt positionMs();
 
+  /// Start the previous queue item when available.
+  void previous();
+
   /// Seek to an absolute position in milliseconds.
   void seek({required BigInt positionMs});
+
+  /// Seek backward or forward from the current position.
+  void seekRelative({required PlatformInt64 deltaMs});
+
+  /// Set queue navigation behavior.
+  void setPlaybackMode({required PlaybackMode mode});
+
+  /// Replace the playback queue and optionally prepare/start one item.
+  void setQueue(
+      {required List<String> paths,
+      BigInt? startIndex,
+      required bool autoplay});
+
+  /// Set output volume. Values outside 0–1 are clamped.
+  void setVolume({required double volume});
+
+  /// Unified playback, queue, volume, and metadata snapshot.
+  PlayerSnapshot snapshot();
 
   /// Current playback state.
   PlayerState state();
@@ -162,7 +189,65 @@ class LyricsLine {
 /// Lyrics source for Flutter FFI.
 enum LyricsSource {
   embedded,
+  externalFile,
   ;
+}
+
+/// Queue navigation behavior for Flutter FFI.
+enum PlaybackMode {
+  sequential,
+  shuffle,
+  repeatOne,
+  repeatAll,
+  ;
+}
+
+/// Unified state for polling from Flutter.
+class PlayerSnapshot {
+  final BigInt positionMs;
+  final BigInt durationMs;
+  final PlayerState state;
+  final double volume;
+  final PlaybackMode playbackMode;
+  final BigInt? currentIndex;
+  final List<QueueItem> queue;
+  final TrackMetadata? metadata;
+
+  const PlayerSnapshot({
+    required this.positionMs,
+    required this.durationMs,
+    required this.state,
+    required this.volume,
+    required this.playbackMode,
+    this.currentIndex,
+    required this.queue,
+    this.metadata,
+  });
+
+  @override
+  int get hashCode =>
+      positionMs.hashCode ^
+      durationMs.hashCode ^
+      state.hashCode ^
+      volume.hashCode ^
+      playbackMode.hashCode ^
+      currentIndex.hashCode ^
+      queue.hashCode ^
+      metadata.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlayerSnapshot &&
+          runtimeType == other.runtimeType &&
+          positionMs == other.positionMs &&
+          durationMs == other.durationMs &&
+          state == other.state &&
+          volume == other.volume &&
+          playbackMode == other.playbackMode &&
+          currentIndex == other.currentIndex &&
+          queue == other.queue &&
+          metadata == other.metadata;
 }
 
 /// Playback state for Flutter FFI.
@@ -173,6 +258,28 @@ enum PlayerState {
   paused,
   ended,
   ;
+}
+
+/// One queue item in a unified player snapshot.
+class QueueItem {
+  final BigInt index;
+  final String path;
+
+  const QueueItem({
+    required this.index,
+    required this.path,
+  });
+
+  @override
+  int get hashCode => index.hashCode ^ path.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is QueueItem &&
+          runtimeType == other.runtimeType &&
+          index == other.index &&
+          path == other.path;
 }
 
 /// Track tags / cover / lyrics for Flutter FFI.

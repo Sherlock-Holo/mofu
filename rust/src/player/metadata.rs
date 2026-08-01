@@ -1,40 +1,42 @@
+use std::fs;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
 /// Embedded cover image (raw encoded bytes, typically JPEG/PNG).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CoverArt {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoverArt {
     pub mime_type: Option<String>,
     pub data: Vec<u8>,
 }
 
 /// Where lyrics content came from (independent of transport / UI).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LyricsSource {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LyricsSource {
     /// Embedded in the audio file (ID3 USLT, Vorbis UNSYNCEDLYRICS, etc.).
     Embedded,
-    // /// Sidecar lyrics file (e.g. `.lrc` / `.txt`). Not filled this phase.
-    // ExternalFile,
-    // /// Fetched from a remote lyrics provider. Not filled this phase.
-    // Network,
+    /// Loaded from the same-name `.lrc` next to the audio file.
+    ExternalFile,
 }
 
-// /// One timed lyric line.
-// Not filled this phase (no timed lyrics yet).
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub(crate) struct LyricsLine {
-//     pub start_ms: u64,
-//     pub end_ms: Option<u64>,
-//     pub text: String,
-// }
+/// One timed lyric line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LyricsLine {
+    pub start_ms: u64,
+    pub end_ms: Option<u64>,
+    pub text: String,
+}
 
 /// Lyrics body: plain text or timed lines (shared by embedded / file / network).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LyricsContent {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LyricsContent {
     Plain { text: String },
-    // Timed { lines: Vec<LyricsLine> },
+    Timed { lines: Vec<LyricsLine> },
 }
 
 /// One lyrics track (language / source / content shape).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Lyrics {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Lyrics {
     pub source: LyricsSource,
     pub language: Option<String>,
     pub description: Option<String>,
@@ -42,8 +44,8 @@ pub(crate) struct Lyrics {
 }
 
 /// Tags, cover, and lyrics for the currently open track.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct TrackMetadata {
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct TrackMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -118,17 +120,135 @@ impl TrackMetadata {
         if text.is_empty() {
             return;
         }
+        let content = LrcDocument::parse(&text)
+            .map(|lines| LyricsContent::Timed { lines })
+            .unwrap_or(LyricsContent::Plain { text });
         self.lyrics.push(Lyrics {
             source: LyricsSource::Embedded,
             language,
             description,
-            content: LyricsContent::Plain { text },
+            content,
         });
+    }
+
+    /// Load a same-name `.lrc` when embedded metadata has no timed lyrics.
+    pub(crate) fn load_sidecar_lyrics(&mut self, media_path: &Path) {
+        if self
+            .lyrics
+            .iter()
+            .any(|lyrics| matches!(lyrics.content, LyricsContent::Timed { .. }))
+        {
+            return;
+        }
+        let sidecar = media_path.with_extension("lrc");
+        let Ok(bytes) = fs::read(&sidecar) else {
+            return;
+        };
+        let text = String::from_utf8_lossy(&bytes)
+            .trim_start_matches('\u{feff}')
+            .to_owned();
+        if text.trim().is_empty() {
+            return;
+        }
+        let content = LrcDocument::parse(&text)
+            .map(|lines| LyricsContent::Timed { lines })
+            .unwrap_or(LyricsContent::Plain { text });
+        self.lyrics.push(Lyrics {
+            source: LyricsSource::ExternalFile,
+            language: None,
+            description: sidecar
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned),
+            content,
+        });
+    }
+}
+
+/// Parser for conventional LRC timestamp lines.
+struct LrcDocument;
+
+impl LrcDocument {
+    fn parse(text: &str) -> Option<Vec<LyricsLine>> {
+        let mut lines = Vec::new();
+        for raw_line in text.lines() {
+            let mut rest = raw_line.trim();
+            let mut timestamps = Vec::new();
+            while let Some(after_open) = rest.strip_prefix('[') {
+                let Some(close) = after_open.find(']') else {
+                    break;
+                };
+                let token = &after_open[..close];
+                let Some(timestamp) = Self::parse_timestamp(token) else {
+                    break;
+                };
+                timestamps.push(timestamp);
+                rest = &after_open[close + 1..];
+            }
+            for start_ms in timestamps {
+                lines.push(LyricsLine {
+                    start_ms,
+                    end_ms: None,
+                    text: rest.trim().to_owned(),
+                });
+            }
+        }
+        if lines.is_empty() {
+            return None;
+        }
+        lines.sort_by_key(|line| line.start_ms);
+        for index in 0..lines.len().saturating_sub(1) {
+            let next_start = lines[index + 1].start_ms;
+            lines[index].end_ms = Some(next_start);
+        }
+        Some(lines)
+    }
+
+    fn parse_timestamp(token: &str) -> Option<u64> {
+        let parts: Vec<&str> = token.split(':').collect();
+        let (hours, minutes, seconds) = match parts.as_slice() {
+            [minutes, seconds] => (0, minutes.parse::<u64>().ok()?, *seconds),
+            [hours, minutes, seconds] => (
+                hours.parse::<u64>().ok()?,
+                minutes.parse::<u64>().ok()?,
+                *seconds,
+            ),
+            _ => return None,
+        };
+        let (whole_seconds, fraction_ms) = match seconds.split_once('.') {
+            Some((whole, fraction)) => {
+                (whole.parse::<u64>().ok()?, Self::fraction_to_ms(fraction)?)
+            }
+            None => (seconds.parse::<u64>().ok()?, 0),
+        };
+        if minutes >= 60 || whole_seconds >= 60 {
+            return None;
+        }
+        Some(
+            hours
+                .saturating_mul(3_600_000)
+                .saturating_add(minutes.saturating_mul(60_000))
+                .saturating_add(whole_seconds.saturating_mul(1_000))
+                .saturating_add(fraction_ms),
+        )
+    }
+
+    fn fraction_to_ms(fraction: &str) -> Option<u64> {
+        if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        let mut digits = fraction.bytes().take(3).collect::<Vec<_>>();
+        while digits.len() < 3 {
+            digits.push(b'0');
+        }
+        str::from_utf8(&digits).ok()?.parse().ok()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
 
     #[test]
@@ -160,5 +280,54 @@ mod tests {
             &meta.lyrics[0].content,
             LyricsContent::Plain { text } if text == "hello"
         ));
+    }
+
+    #[test]
+    fn lrc_parses_multiple_tags_and_assigns_end_times() {
+        let lines =
+            LrcDocument::parse("[00:01.20][00:02.345]hello\n[01:02]world\n[ar:ignored]\nnot timed")
+                .expect("timed lyrics");
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0].start_ms, 1_200);
+        assert_eq!(lines[0].end_ms, Some(2_345));
+        assert_eq!(lines[1].start_ms, 2_345);
+        assert_eq!(lines[2].start_ms, 62_000);
+        assert_eq!(lines[2].text, "world");
+    }
+
+    #[test]
+    fn invalid_lrc_has_no_timed_lines() {
+        assert!(LrcDocument::parse("[ar:artist]\nplain lyrics").is_none());
+        assert!(LrcDocument::parse("[00:99]invalid").is_none());
+    }
+
+    #[test]
+    fn sidecar_is_loaded_unless_embedded_timed_lyrics_exist() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let directory =
+            std::env::temp_dir().join(format!("mofu-lrc-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&directory).expect("create test directory");
+        let media = directory.join("song.mp3");
+        fs::write(media.with_extension("lrc"), "[00:01.00]sidecar").expect("write sidecar");
+
+        let mut metadata = TrackMetadata::default();
+        metadata.push_embedded_plain_lyrics("plain".into(), None, None);
+        metadata.load_sidecar_lyrics(&media);
+        assert_eq!(metadata.lyrics.len(), 2);
+        assert_eq!(metadata.lyrics[1].source, LyricsSource::ExternalFile);
+        assert!(matches!(
+            metadata.lyrics[1].content,
+            LyricsContent::Timed { .. }
+        ));
+
+        let mut timed = TrackMetadata::default();
+        timed.push_embedded_plain_lyrics("[00:02]embedded".into(), None, None);
+        timed.load_sidecar_lyrics(&media);
+        assert_eq!(timed.lyrics.len(), 1);
+        assert_eq!(timed.lyrics[0].source, LyricsSource::Embedded);
+        fs::remove_dir_all(directory).expect("remove test directory");
     }
 }

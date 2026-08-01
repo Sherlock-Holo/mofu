@@ -10,6 +10,7 @@ use super::command::PlayerCommand;
 use super::decoder::{DecodePacket, DecoderSession};
 use super::error::PlayerError;
 use super::output::{CpalOutput, WriteStatus};
+use super::queue::PlaybackQueue;
 use super::state::{PlaybackState, SharedProgress};
 
 /// Orchestrates commands, decoding, and output.
@@ -21,6 +22,7 @@ pub(crate) struct DecodeWorker {
     progress: Arc<SharedProgress>,
     session: Option<DecoderSession>,
     output: Option<CpalOutput>,
+    queue: PlaybackQueue,
 }
 
 enum RecvCommand {
@@ -42,6 +44,7 @@ impl DecodeWorker {
                     progress,
                     session: None,
                     output: None,
+                    queue: PlaybackQueue::new(),
                 }
                 .run();
             })
@@ -125,7 +128,98 @@ impl DecodeWorker {
             PlayerCommand::Seek { position, reply } => {
                 let _ = reply.send(self.seek(position));
             }
+            PlayerCommand::SeekRelative { delta_ms, reply } => {
+                let current = self.progress.snapshot().position.as_millis() as i128;
+                let target = (current + i128::from(delta_ms)).clamp(0, i128::from(u64::MAX)) as u64;
+                let _ = reply.send(self.seek(Duration::from_millis(target)));
+            }
+            PlayerCommand::SetQueue {
+                paths,
+                start_index,
+                autoplay,
+                reply,
+            } => {
+                let result = self.set_queue(paths, start_index, autoplay);
+                let _ = reply.send(result);
+            }
+            PlayerCommand::PlayIndex { index, reply } => {
+                let result = self.play_index(index);
+                let _ = reply.send(result);
+            }
+            PlayerCommand::Next { reply } => {
+                let result = self.change_track(false, true);
+                let _ = reply.send(result);
+            }
+            PlayerCommand::Previous { reply } => {
+                let result = self.change_track(false, false);
+                let _ = reply.send(result);
+            }
+            PlayerCommand::SetPlaybackMode { mode, reply } => {
+                self.queue.set_mode(mode);
+                self.publish_queue();
+                let _ = reply.send(Ok(()));
+            }
+            PlayerCommand::SetVolume { volume, reply } => {
+                self.progress.set_volume(volume);
+                let _ = reply.send(Ok(()));
+            }
         }
+    }
+
+    fn set_queue(
+        &mut self,
+        paths: Vec<PathBuf>,
+        start_index: Option<usize>,
+        autoplay: bool,
+    ) -> Result<(), PlayerError> {
+        if start_index.is_some_and(|index| index >= paths.len()) {
+            return Err(PlayerError::InvalidQueueIndex);
+        }
+        let selected = self.queue.replace(paths, start_index);
+        self.publish_queue();
+        match selected {
+            Some(path) => {
+                self.open_media(path)?;
+                if autoplay {
+                    self.progress.set_state(PlaybackState::Playing);
+                }
+            }
+            None => self.clear_media(PlaybackState::Idle),
+        }
+        Ok(())
+    }
+
+    fn play_index(&mut self, index: usize) -> Result<(), PlayerError> {
+        let path = self
+            .queue
+            .select(index)
+            .ok_or(PlayerError::InvalidQueueIndex)?;
+        self.publish_queue();
+        self.open_media(path)?;
+        self.progress.set_state(PlaybackState::Playing);
+        Ok(())
+    }
+
+    fn change_track(&mut self, ended: bool, forward: bool) -> Result<(), PlayerError> {
+        let path = if forward {
+            self.queue.next(ended)
+        } else {
+            self.queue.previous()
+        };
+        self.publish_queue();
+        let Some(path) = path else {
+            if ended {
+                self.progress.set_state(PlaybackState::Ended);
+            }
+            return Ok(());
+        };
+        self.open_media(path)?;
+        self.progress.set_state(PlaybackState::Playing);
+        Ok(())
+    }
+
+    fn publish_queue(&self) {
+        self.progress.set_queue(self.queue.snapshot());
     }
 
     fn open_media(&mut self, open_path: PathBuf) -> Result<(), PlayerError> {
@@ -220,7 +314,7 @@ impl DecodeWorker {
                 .as_ref()
                 .expect("session present while writing samples")
                 .pcm_format();
-            match CpalOutput::try_open(format) {
+            match CpalOutput::try_open(format, self.progress.shared_volume()) {
                 Ok(opened) => self.output = Some(opened),
                 Err(err) => {
                     error!(%err, "audio output open failed");
@@ -255,6 +349,9 @@ impl DecodeWorker {
         {
             self.progress.set_position_ms(active.duration_ms());
         }
-        self.progress.set_state(PlaybackState::Ended);
+        if let Err(err) = self.change_track(true, true) {
+            error!(%err, "automatic queue advance failed");
+            self.progress.set_state(PlaybackState::Ended);
+        }
     }
 }

@@ -2,9 +2,13 @@ use std::time::Duration;
 
 use crate::player::metadata::{
     CoverArt as DomainCoverArt, Lyrics as DomainLyrics, LyricsContent as DomainLyricsContent,
-    LyricsSource as DomainLyricsSource, TrackMetadata as DomainTrackMetadata,
+    LyricsLine as DomainLyricsLine, LyricsSource as DomainLyricsSource,
+    TrackMetadata as DomainTrackMetadata,
 };
-use crate::player::{PlaybackState, Player as DomainPlayer, PlayerError};
+use crate::player::{
+    PlaybackMode as DomainPlaybackMode, PlaybackState, Player as DomainPlayer, PlayerError,
+    PlayerSnapshot as DomainPlayerSnapshot,
+};
 
 fn map_err(err: PlayerError) -> String {
     err.to_string()
@@ -57,6 +61,70 @@ impl Player {
             .map_err(map_err)
     }
 
+    /// Seek backward or forward from the current position.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn seek_relative(&self, delta_ms: i64) -> Result<(), String> {
+        self.inner.seek_relative(delta_ms).map_err(map_err)
+    }
+
+    /// Replace the playback queue and optionally prepare/start one item.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn set_queue(
+        &self,
+        paths: Vec<String>,
+        start_index: Option<u64>,
+        autoplay: bool,
+    ) -> Result<(), String> {
+        let start_index = start_index
+            .map(usize::try_from)
+            .transpose()
+            .map_err(|err| err.to_string())?;
+        self.inner
+            .set_queue(
+                paths.into_iter().map(Into::into).collect(),
+                start_index,
+                autoplay,
+            )
+            .map_err(map_err)
+    }
+
+    /// Select and start one queue item.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn play_index(&self, index: u64) -> Result<(), String> {
+        let index = usize::try_from(index).map_err(|err| err.to_string())?;
+        self.inner.play_index(index).map_err(map_err)
+    }
+
+    /// Start the next queue item when available.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn next(&self) -> Result<(), String> {
+        self.inner.next().map_err(map_err)
+    }
+
+    /// Start the previous queue item when available.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn previous(&self) -> Result<(), String> {
+        self.inner.previous().map_err(map_err)
+    }
+
+    /// Set output volume. Values outside 0–1 are clamped.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn set_volume(&self, volume: f64) -> Result<(), String> {
+        self.inner.set_volume(volume as f32).map_err(map_err)
+    }
+
+    /// Set queue navigation behavior.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn set_playback_mode(&self, mode: PlaybackMode) -> Result<(), String> {
+        self.inner.set_playback_mode(mode.into()).map_err(map_err)
+    }
+
+    /// Unified playback, queue, volume, and metadata snapshot.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn snapshot(&self) -> PlayerSnapshot {
+        self.inner.full_snapshot().into()
+    }
+
     /// Current playback position in milliseconds.
     #[flutter_rust_bridge::frb(sync)]
     pub fn position_ms(&self) -> u64 {
@@ -94,6 +162,37 @@ pub enum PlayerState {
     Ended,
 }
 
+/// Queue navigation behavior for Flutter FFI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackMode {
+    Sequential,
+    Shuffle,
+    RepeatOne,
+    RepeatAll,
+}
+
+impl From<PlaybackMode> for DomainPlaybackMode {
+    fn from(value: PlaybackMode) -> Self {
+        match value {
+            PlaybackMode::Sequential => Self::Sequential,
+            PlaybackMode::Shuffle => Self::Shuffle,
+            PlaybackMode::RepeatOne => Self::RepeatOne,
+            PlaybackMode::RepeatAll => Self::RepeatAll,
+        }
+    }
+}
+
+impl From<DomainPlaybackMode> for PlaybackMode {
+    fn from(value: DomainPlaybackMode) -> Self {
+        match value {
+            DomainPlaybackMode::Sequential => Self::Sequential,
+            DomainPlaybackMode::Shuffle => Self::Shuffle,
+            DomainPlaybackMode::RepeatOne => Self::RepeatOne,
+            DomainPlaybackMode::RepeatAll => Self::RepeatAll,
+        }
+    }
+}
+
 impl From<PlaybackState> for PlayerState {
     fn from(value: PlaybackState) -> Self {
         match value {
@@ -117,8 +216,7 @@ pub struct CoverArt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LyricsSource {
     Embedded,
-    // ExternalFile,
-    // Network,
+    ExternalFile,
 }
 
 /// One timed lyric line for Flutter FFI.
@@ -179,6 +277,26 @@ pub struct TrackMetadata {
     pub lyrics: Vec<Lyrics>,
 }
 
+/// One queue item in a unified player snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueItem {
+    pub index: u64,
+    pub path: String,
+}
+
+/// Unified state for polling from Flutter.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlayerSnapshot {
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    pub state: PlayerState,
+    pub volume: f64,
+    pub playback_mode: PlaybackMode,
+    pub current_index: Option<u64>,
+    pub queue: Vec<QueueItem>,
+    pub metadata: Option<TrackMetadata>,
+}
+
 impl From<&DomainCoverArt> for CoverArt {
     fn from(value: &DomainCoverArt) -> Self {
         Self {
@@ -192,6 +310,7 @@ impl From<DomainLyricsSource> for LyricsSource {
     fn from(value: DomainLyricsSource) -> Self {
         match value {
             DomainLyricsSource::Embedded => Self::Embedded,
+            DomainLyricsSource::ExternalFile => Self::ExternalFile,
         }
     }
 }
@@ -204,6 +323,21 @@ impl From<&DomainLyricsContent> for LyricsContent {
                 text: Some(text.clone()),
                 lines: None,
             },
+            DomainLyricsContent::Timed { lines } => Self {
+                kind: LyricsContentKind::Timed,
+                text: None,
+                lines: Some(lines.iter().map(LyricsLine::from).collect()),
+            },
+        }
+    }
+}
+
+impl From<&DomainLyricsLine> for LyricsLine {
+    fn from(value: &DomainLyricsLine) -> Self {
+        Self {
+            start_ms: value.start_ms,
+            end_ms: value.end_ms,
+            text: value.text.clone(),
         }
     }
 }
@@ -239,6 +373,30 @@ impl From<&DomainTrackMetadata> for TrackMetadata {
             disc_total: value.disc_total,
             cover: value.cover.as_ref().map(CoverArt::from),
             lyrics: value.lyrics.iter().map(Lyrics::from).collect(),
+        }
+    }
+}
+
+impl From<DomainPlayerSnapshot> for PlayerSnapshot {
+    fn from(value: DomainPlayerSnapshot) -> Self {
+        Self {
+            position_ms: value.position.as_millis() as u64,
+            duration_ms: value.duration.as_millis() as u64,
+            state: value.state.into(),
+            volume: f64::from(value.volume),
+            playback_mode: value.queue.mode.into(),
+            current_index: value.queue.current_index.map(|index| index as u64),
+            queue: value
+                .queue
+                .paths
+                .into_iter()
+                .enumerate()
+                .map(|(index, path)| QueueItem {
+                    index: index as u64,
+                    path: path.to_string_lossy().into_owned(),
+                })
+                .collect(),
+            metadata: value.metadata.as_ref().map(TrackMetadata::from),
         }
     }
 }

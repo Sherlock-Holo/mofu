@@ -38,6 +38,9 @@ dependencies:
   rust_lib_mofu:
     path: rust_builder
   flutter_rust_bridge: 2.12.0
+  provider: ^6.1.5+1
+  go_router: ^17.3.0
+  file_picker: ^11.0.3
 
 dev_dependencies:
   flutter_test:

@@ -16,6 +16,7 @@ use tracing::error;
 
 use super::error::{OutputError, PlayerError};
 use super::format::AudioFormat;
+use super::state::SharedVolume;
 
 /// Outcome of a non-blocking write into the audio ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,7 +139,10 @@ pub(crate) struct CpalOutput {
 
 impl CpalOutput {
     /// Open the default output device, preferring the source sample rate when possible.
-    pub(crate) fn try_open(format: AudioFormat) -> Result<Self, PlayerError> {
+    pub(crate) fn try_open(
+        format: AudioFormat,
+        volume: Arc<SharedVolume>,
+    ) -> Result<Self, PlayerError> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -169,9 +173,15 @@ impl CpalOutput {
         let callback_flush = flush.clone();
 
         let stream = match default_config.sample_format() {
-            SampleFormat::F32 => build_stream::<f32>(&device, &config, consumer, callback_flush)?,
-            SampleFormat::I16 => build_stream::<i16>(&device, &config, consumer, callback_flush)?,
-            SampleFormat::U16 => build_stream::<u16>(&device, &config, consumer, callback_flush)?,
+            SampleFormat::F32 => {
+                build_stream::<f32>(&device, &config, consumer, callback_flush, volume)?
+            }
+            SampleFormat::I16 => {
+                build_stream::<i16>(&device, &config, consumer, callback_flush, volume)?
+            }
+            SampleFormat::U16 => {
+                build_stream::<u16>(&device, &config, consumer, callback_flush, volume)?
+            }
             _ => return Err(OutputError::UnsupportedSampleFormat.into()),
         };
 
@@ -310,6 +320,7 @@ fn build_stream<T>(
     config: &StreamConfig,
     mut consumer: Consumer<f32>,
     flush: Arc<FlushGate>,
+    volume: Arc<SharedVolume>,
 ) -> Result<Stream, PlayerError>
 where
     T: SizedSample + FromSample<f32>,
@@ -328,8 +339,9 @@ where
                     flush.acknowledge(requested);
                 }
 
+                let gain = volume.get();
                 for sample in data.iter_mut() {
-                    let value = consumer.pop().unwrap_or(0.0);
+                    let value = consumer.pop().unwrap_or(0.0) * gain;
                     *sample = T::from_sample(value);
                 }
             },

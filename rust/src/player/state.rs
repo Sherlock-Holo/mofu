@@ -1,8 +1,9 @@
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::metadata::TrackMetadata;
+use super::queue::{PlaybackMode, QueueSnapshot};
 
 /// High-level playback state exposed to callers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,12 +41,51 @@ pub struct PositionSnapshot {
     pub state: PlaybackState,
 }
 
+/// Complete player state returned as one coherent FFI-friendly snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlayerSnapshot {
+    pub position: Duration,
+    pub duration: Duration,
+    pub state: PlaybackState,
+    pub volume: f32,
+    pub queue: QueueSnapshot,
+    pub metadata: Option<TrackMetadata>,
+}
+
+/// Atomic gain read directly by the realtime audio callback.
+pub(crate) struct SharedVolume {
+    bits: AtomicU32,
+}
+
+impl SharedVolume {
+    pub(crate) fn new() -> Self {
+        Self {
+            bits: AtomicU32::new(1.0_f32.to_bits()),
+        }
+    }
+
+    pub(crate) fn set(&self, volume: f32) {
+        let volume = if volume.is_finite() {
+            volume.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.bits.store(volume.to_bits(), Ordering::Release);
+    }
+
+    pub(crate) fn get(&self) -> f32 {
+        f32::from_bits(self.bits.load(Ordering::Acquire))
+    }
+}
+
 /// Shared progress/state readable from any thread without blocking the audio callback.
 pub(crate) struct SharedProgress {
     position_ms: AtomicU64,
     duration_ms: AtomicU64,
     state: AtomicU8,
     metadata: Mutex<Option<Arc<TrackMetadata>>>,
+    queue: Mutex<QueueSnapshot>,
+    volume: Arc<SharedVolume>,
 }
 
 impl SharedProgress {
@@ -55,6 +95,12 @@ impl SharedProgress {
             duration_ms: AtomicU64::new(0),
             state: AtomicU8::new(PlaybackState::Idle as u8),
             metadata: Mutex::new(None),
+            queue: Mutex::new(QueueSnapshot {
+                paths: Vec::new(),
+                current_index: None,
+                mode: PlaybackMode::Sequential,
+            }),
+            volume: Arc::new(SharedVolume::new()),
         }
     }
 
@@ -94,11 +140,61 @@ impl SharedProgress {
             .clone()
     }
 
+    pub(crate) fn set_queue(&self, queue: QueueSnapshot) {
+        *self.queue.lock().expect("queue mutex poisoned") = queue;
+    }
+
+    pub(crate) fn queue(&self) -> QueueSnapshot {
+        self.queue.lock().expect("queue mutex poisoned").clone()
+    }
+
+    pub(crate) fn set_volume(&self, volume: f32) {
+        self.volume.set(volume);
+    }
+
+    pub(crate) fn volume(&self) -> f32 {
+        self.volume.get()
+    }
+
+    pub(crate) fn shared_volume(&self) -> Arc<SharedVolume> {
+        self.volume.clone()
+    }
+
     pub(crate) fn snapshot(&self) -> PositionSnapshot {
         PositionSnapshot {
             position: Duration::from_millis(self.position_ms.load(Ordering::Acquire)),
             duration: Duration::from_millis(self.duration_ms.load(Ordering::Acquire)),
             state: PlaybackState::from_u8(self.state.load(Ordering::Acquire)),
         }
+    }
+
+    pub(crate) fn full_snapshot(&self) -> PlayerSnapshot {
+        let position = self.snapshot();
+        PlayerSnapshot {
+            position: position.position,
+            duration: position.duration,
+            state: position.state,
+            volume: self.volume(),
+            queue: self.queue(),
+            metadata: self.metadata().map(|metadata| metadata.as_ref().clone()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn volume_is_clamped() {
+        let volume = SharedVolume::new();
+        volume.set(-0.25);
+        assert_eq!(volume.get(), 0.0);
+        volume.set(1.25);
+        assert_eq!(volume.get(), 1.0);
+        volume.set(0.4);
+        assert!((volume.get() - 0.4).abs() < f32::EPSILON);
+        volume.set(f32::NAN);
+        assert_eq!(volume.get(), 0.0);
     }
 }

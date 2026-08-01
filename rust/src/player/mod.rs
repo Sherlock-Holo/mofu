@@ -9,8 +9,10 @@ mod command;
 mod decoder;
 mod error;
 mod format;
-pub(crate) mod metadata;
+mod inspector;
+pub mod metadata;
 mod output;
+mod queue;
 mod state;
 mod worker;
 
@@ -23,9 +25,11 @@ use command::CommandReply;
 pub use command::PlayerCommand;
 use crossbeam_channel::Sender;
 pub use error::PlayerError;
+pub use inspector::{MediaInspection, MediaInspector, SymphoniaMediaInspector};
 use metadata::TrackMetadata;
+pub use queue::{PlaybackMode, QueueSnapshot};
 use state::SharedProgress;
-pub use state::{PlaybackState, PositionSnapshot};
+pub use state::{PlaybackState, PlayerSnapshot, PositionSnapshot};
 use worker::DecodeWorker;
 
 /// Handle for controlling background decode/playback.
@@ -76,9 +80,59 @@ impl Player {
         self.request(|reply| PlayerCommand::Seek { position, reply })
     }
 
+    /// Seek relative to the current position.
+    pub fn seek_relative(&self, delta_ms: i64) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::SeekRelative { delta_ms, reply })
+    }
+
+    /// Replace the queue and optionally prepare/start one entry.
+    pub fn set_queue(
+        &self,
+        paths: Vec<PathBuf>,
+        start_index: Option<usize>,
+        autoplay: bool,
+    ) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::SetQueue {
+            paths,
+            start_index,
+            autoplay,
+            reply,
+        })
+    }
+
+    /// Select and start one queue entry.
+    pub fn play_index(&self, index: usize) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::PlayIndex { index, reply })
+    }
+
+    /// Start the next queue entry when available.
+    pub fn next(&self) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::Next { reply })
+    }
+
+    /// Start the previous queue entry when available.
+    pub fn previous(&self) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::Previous { reply })
+    }
+
+    /// Set automatic queue navigation behavior.
+    pub fn set_playback_mode(&self, mode: PlaybackMode) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::SetPlaybackMode { mode, reply })
+    }
+
+    /// Set output volume in the range 0–1. Out-of-range values are clamped.
+    pub fn set_volume(&self, volume: f32) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::SetVolume { volume, reply })
+    }
+
     /// Current playback snapshot (position, duration, state).
     pub fn snapshot(&self) -> PositionSnapshot {
         self.progress.snapshot()
+    }
+
+    /// Complete playback, queue, volume, and metadata snapshot.
+    pub fn full_snapshot(&self) -> PlayerSnapshot {
+        self.progress.full_snapshot()
     }
 
     /// Current position.
