@@ -52,7 +52,7 @@ class CoverView extends StatelessWidget {
         cacheWidth: cachePx,
         cacheHeight: cachePx,
         gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => _placeholder(size),
+        errorBuilder: (_, _, _) => _placeholder(size),
       );
     } else {
       child = _placeholder(size);
@@ -129,7 +129,8 @@ class BlurCoverBackground extends StatelessWidget {
                 cacheWidth: cacheWidth,
                 cacheHeight: cacheHeight,
                 gaplessPlayback: true,
-                errorBuilder: (_, __, ___) => const ColoredBox(
+                errorBuilder: (_, _, _) =>
+                const ColoredBox(
                   color: StrawberryCream.creamDeep,
                 ),
               ),
@@ -155,7 +156,7 @@ class BlurCoverBackground extends StatelessWidget {
             ),
           ),
         ),
-        if (child != null) child!,
+        ?child,
       ],
     );
   }

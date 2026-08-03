@@ -8,6 +8,7 @@ import 'dart:convert';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+import 'api/file_dialog.dart';
 import 'api/library.dart';
 import 'api/player.dart';
 import 'api/setup.dart';
@@ -72,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1630333891;
+  int get rustContentHash => -1200953684;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -182,6 +183,10 @@ abstract class RustLibApi extends BaseApi {
   PlayerState crateApiPlayerPlayerState({required Player that});
 
   void crateApiPlayerPlayerStop({required Player that});
+
+  Future<String?> crateApiFileDialogPickMusicDirectory();
+
+  Future<List<String>?> crateApiFileDialogPickMusicFiles();
 
   void crateApiSetupSetup();
 
@@ -1167,11 +1172,59 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String?> crateApiFileDialogPickMusicDirectory() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 37, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiFileDialogPickMusicDirectoryConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiFileDialogPickMusicDirectoryConstMeta =>
+      const TaskConstMeta(
+        debugName: "pick_music_directory",
+        argNames: [],
+      );
+
+  @override
+  Future<List<String>?> crateApiFileDialogPickMusicFiles() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 38, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_list_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiFileDialogPickMusicFilesConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiFileDialogPickMusicFilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "pick_music_files",
+        argNames: [],
+      );
+
+  @override
   void crateApiSetupSetup() {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -1458,6 +1511,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_64(raw);
+  }
+
+  @protected
+  List<String>? dco_decode_opt_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_String(raw);
   }
 
   @protected
@@ -1956,6 +2015,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<String>? sse_decode_opt_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   List<LyricsLine>? sse_decode_opt_list_lyrics_line(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2431,6 +2501,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_list_String(List<String>? self,
+      SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_String(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_list_lyrics_line(
       List<LyricsLine>? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2601,6 +2682,8 @@ class LibraryImpl extends RustOpaque implements Library {
       );
 
   /// Load cover art for the given song paths; unknown / cover-less paths are skipped.
+  ///
+  /// Prefer chunking large path lists on the Dart side so each FFI payload stays bounded.
   Future<List<SongCover>> coversForPaths({required List<String> paths}) =>
       RustLib.instance.api
           .crateApiLibraryLibraryCoversForPaths(that: this, paths: paths);

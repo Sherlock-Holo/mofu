@@ -23,6 +23,8 @@ abstract class Library implements RustOpaqueInterface {
   Future<void> clearPlaybackSession();
 
   /// Load cover art for the given song paths; unknown / cover-less paths are skipped.
+  ///
+  /// Prefer chunking large path lists on the Dart side so each FFI payload stays bounded.
   Future<List<SongCover>> coversForPaths({required List<String> paths});
 
   /// Create an empty user-managed playlist.

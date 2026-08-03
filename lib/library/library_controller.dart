@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:mofu/src/rust/api/file_dialog.dart';
 import 'package:mofu/src/rust/api/library.dart';
 import 'package:mofu/src/rust/api/player.dart'
     show CoverArt, PlaybackMode, TrackMetadata;
@@ -17,12 +17,11 @@ class LibraryController extends ChangeNotifier {
   @visibleForTesting
   LibraryController.fake({
     List<Playlist> playlists = const [],
-    BigInt? selectedId,
+    this._selectedId,
   })  : _library = null,
         _ownsLibrary = false,
         _fake = true,
-        _playlists = List<Playlist>.unmodifiable(playlists),
-        _selectedId = selectedId {
+       _playlists = List<Playlist>.unmodifiable(playlists) {
     _ensureSelection();
   }
 
@@ -376,9 +375,7 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return;
     }
-    final path = await FilePicker.getDirectoryPath(
-      dialogTitle: '选择音乐目录',
-    );
+    final path = await pickMusicDirectory();
     if (path == null || path.isEmpty) {
       return;
     }
@@ -394,35 +391,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return;
     }
-    final result = await FilePicker.pickFiles(
-      dialogTitle: '添加音乐文件',
-      allowMultiple: true,
-      type: FileType.custom,
-      allowedExtensions: const [
-        'mp3',
-        'flac',
-        'wav',
-        'ogg',
-        'm4a',
-        'aac',
-        'opus',
-        'wma',
-        'aiff',
-        'aif',
-      ],
-    );
-    if (result == null || result.files.isEmpty) {
-      return;
-    }
-
-    final paths = result.files
-        .map((file) => file.path)
-        .whereType<String>()
-        .where((path) => path.isNotEmpty)
-        .toList();
-    if (paths.isEmpty) {
-      _error = '无法读取所选文件路径';
-      notifyListeners();
+    final paths = await pickMusicFiles();
+    if (paths == null || paths.isEmpty) {
       return;
     }
 

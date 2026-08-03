@@ -22,20 +22,18 @@ class _PendingQueue {
 /// 轮询 Rust [Player] 快照并转发播放控制。
 class PlayerController extends ChangeNotifier {
   PlayerController({
-    Player? player,
-    Duration pollInterval = const Duration(milliseconds: 120),
-  })  : _player = player,
-        _pollInterval = pollInterval,
-        _ownsPlayer = true,
+    this._player,
+    this._pollInterval = const Duration(milliseconds: 120),
+  })
+      : _ownsPlayer = true,
         _fake = false;
 
   /// 不连接 Rust / 音频设备，供 Widget 与 integration 测试注入。
   @visibleForTesting
   PlayerController.fake({
     PlayerSnapshot? snapshot,
-    Duration pollInterval = const Duration(days: 1),
+    this._pollInterval = const Duration(days: 1),
   })  : _player = null,
-        _pollInterval = pollInterval,
         _ownsPlayer = false,
         _fake = true,
         _snapshot = snapshot ?? idleSnapshot(),
