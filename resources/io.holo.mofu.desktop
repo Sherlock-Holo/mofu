@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.5
+Name=Mofu
+Comment=Mofu 音乐播放器
+Type=Application
+Icon=io.holo.mofu
+Exec=mofu %F
+Terminal=false
+StartupNotify=true
+Categories=AudioVideo;Audio;Player;
+Keywords=music;audio;player;local;playlist;lyrics;
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/x-vorbis+ogg;audio/x-flac;audio/wav;audio/x-wav;audio/mp4;audio/aac;audio/x-m4a;
+SingleMainWindow=true

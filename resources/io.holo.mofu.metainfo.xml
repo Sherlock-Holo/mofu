@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.holo.mofu</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Mofu</name>
+  <summary>本地音乐播放器</summary>
+  <description>
+    <p>
+      Mofu 是一款本地音乐播放器，支持扫描目录与手动导入音频、播放列表管理、
+      播放模式切换、封面与歌词显示。
+    </p>
+  </description>
+  <icon type="remote" width="256" height="256" scale="1">
+    https://github.com/Sherlock-Holo/mofu/raw/master/resources/icons/hicolor/256x256/apps/io.holo.mofu.png
+  </icon>
+  <url type="homepage">https://github.com/Sherlock-Holo/mofu</url>
+  <url type="vcs-browser">https://github.com/Sherlock-Holo/mofu</url>
+  <launchable type="desktop-id">io.holo.mofu.desktop</launchable>
+  <provides>
+    <id>com.system76.CosmicApplication</id>
+    <binaries>
+      <binary>mofu</binary>
+    </binaries>
+  </provides>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>audio</keyword>
+    <keyword>player</keyword>
+    <keyword>local</keyword>
+    <keyword>playlist</keyword>
+    <keyword>lyrics</keyword>
+  </keywords>
+  <content_rating type="oars-1.1" />
+</component>
