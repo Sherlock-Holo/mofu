@@ -69,10 +69,10 @@ class PlaybackBar extends StatelessWidget {
                             borderRadius: BorderRadius.circular(
                               StrawberryCream.radiusSm,
                             ),
-                            onTap: meta == null &&
-                                    snapshot?.currentIndex == null
-                                ? null
-                                : () => context.go('/now-playing'),
+                            onTap:
+                                meta == null && snapshot?.currentIndex == null
+                                    ? null
+                                    : () => context.go('/now-playing'),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -152,9 +152,10 @@ class PlaybackBar extends StatelessWidget {
                             onChanged: player.setVolume,
                           )
                         else ...[
-                          const Icon(Icons.volume_up_rounded, size: 20),
+                          _VolumeIcon(volume: player.volume, size: 20),
+                          _VolumeLabel(volume: player.volume),
                           SizedBox(
-                            width: 120,
+                            width: 108,
                             child: Slider(
                               value: player.volume.clamp(0, 1),
                               onChanged: player.setVolume,
@@ -257,13 +258,19 @@ class _CompactVolumeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: '音量',
-      onPressed: () => _showVolumeSheet(context),
-      icon: Icon(
-        volume <= 0.001 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-        color: StrawberryCream.wine,
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: '音量',
+          onPressed: () => _showVolumeSheet(context),
+          icon: _VolumeIcon(
+            volume: volume,
+            color: StrawberryCream.wine,
+          ),
+        ),
+        _VolumeLabel(volume: volume),
+      ],
     );
   }
 
@@ -280,7 +287,8 @@ class _CompactVolumeButton extends StatelessWidget {
               builder: (context, setModalState) {
                 return Row(
                   children: [
-                    const Icon(Icons.volume_up_rounded),
+                    _VolumeIcon(volume: current),
+                    _VolumeLabel(volume: current),
                     Expanded(
                       child: Slider(
                         value: current,
@@ -297,6 +305,52 @@ class _CompactVolumeButton extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _VolumeIcon extends StatelessWidget {
+  const _VolumeIcon({
+    required this.volume,
+    this.size,
+    this.color,
+  });
+
+  final double volume;
+  final double? size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = volume.clamp(0.0, 1.0);
+    final icon = switch (normalized) {
+      <= 0.001 => Icons.volume_off_rounded,
+      <= 0.33 => Icons.volume_mute_rounded,
+      <= 0.66 => Icons.volume_down_rounded,
+      _ => Icons.volume_up_rounded,
+    };
+    return Icon(icon, size: size, color: color);
+  }
+}
+
+class _VolumeLabel extends StatelessWidget {
+  const _VolumeLabel({required this.volume});
+
+  final double volume;
+
+  @override
+  Widget build(BuildContext context) {
+    final percentage = (volume.clamp(0.0, 1.0) * 100).round();
+    return SizedBox(
+      width: 28,
+      child: Text(
+        '$percentage',
+        textAlign: TextAlign.right,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: StrawberryCream.wineMuted,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
     );
   }
 }
