@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::error::LibraryError;
+use super::error::CollectionError;
 use super::model::{CoverExt, SongId};
 use crate::player::metadata::CoverArt;
 
@@ -13,7 +13,7 @@ pub(crate) struct CoverStore {
 }
 
 impl CoverStore {
-    pub(crate) fn open(root: PathBuf) -> Result<Self, LibraryError> {
+    pub(crate) fn open(root: PathBuf) -> Result<Self, CollectionError> {
         fs::create_dir_all(&root)?;
         Ok(Self { root })
     }
@@ -23,7 +23,7 @@ impl CoverStore {
         &self,
         song_id: SongId,
         cover: &CoverArt,
-    ) -> Result<CoverExt, LibraryError> {
+    ) -> Result<CoverExt, CollectionError> {
         let ext = CoverExt::from_mime(cover.mime_type.as_deref());
         let path = self.path_for(song_id, ext);
         // Drop previous extension variants before writing the new temp file.

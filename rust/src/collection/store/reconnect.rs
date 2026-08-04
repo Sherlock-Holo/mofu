@@ -10,7 +10,7 @@ use smol::Timer;
 use tracing::warn;
 use turso::{Builder, Connection, Database};
 
-use super::super::error::LibraryError;
+use super::super::error::CollectionError;
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -55,9 +55,9 @@ struct TursoManager {
 
 impl Manager for TursoManager {
     type Type = PooledConn;
-    type Error = LibraryError;
+    type Error = CollectionError;
 
-    async fn create(&self) -> Result<PooledConn, LibraryError> {
+    async fn create(&self) -> Result<PooledConn, CollectionError> {
         let conn = self.database.connect()?;
         // Without this, concurrent writers fail immediately with Busy; the outer
         // retry loop alone cannot wait out a lock held by another pool connection.
@@ -69,7 +69,7 @@ impl Manager for TursoManager {
         &self,
         conn: &mut PooledConn,
         _metrics: &Metrics,
-    ) -> RecycleResult<LibraryError> {
+    ) -> RecycleResult<CollectionError> {
         if conn.is_idle() {
             return Err(RecycleError::message("idle timeout"));
         }
@@ -80,13 +80,13 @@ impl Manager for TursoManager {
 /// Owns a Turso [`Database`] behind a deadpool connection pool.
 ///
 /// Each [`Self::run`] checkout uses an independent connection so concurrent
-/// library ops do not hit Turso's "concurrent use forbidden" misuse.
+/// collection ops do not hit Turso's "concurrent use forbidden" misuse.
 pub(crate) struct ReconnectableDb {
     pool: Pool<TursoManager>,
 }
 
 impl ReconnectableDb {
-    pub(crate) async fn open(path: &Path) -> Result<Self, LibraryError> {
+    pub(crate) async fn open(path: &Path) -> Result<Self, CollectionError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -109,9 +109,9 @@ impl ReconnectableDb {
     /// Uses [`AsyncFnMut`] (not [`AsyncFn`]): the retry loop calls `op` repeatedly
     /// through `&mut F`. Passes `&mut Connection` so the checked-out pool object
     /// stays exclusively borrowed for the whole op — no connection clone.
-    pub(crate) async fn run<T, F>(&self, mut op: F) -> Result<T, LibraryError>
+    pub(crate) async fn run<T, F>(&self, mut op: F) -> Result<T, CollectionError>
     where
-        F: AsyncFnMut(&mut Connection) -> Result<T, LibraryError>,
+        F: AsyncFnMut(&mut Connection) -> Result<T, CollectionError>,
     {
         // Constants count retries after the first attempt (not total attempts).
         for attempt in 0..MAX_DISCARDABLE_RETRIES {
@@ -121,7 +121,7 @@ impl ReconnectableDb {
                     warn!(
                         %err,
                         attempt,
-                        "library database connection failed; retrying with a fresh pool connection"
+                        "collection database connection failed; retrying with a fresh pool connection"
                     );
                 }
                 Err(err) => return Err(err),
@@ -130,9 +130,9 @@ impl ReconnectableDb {
         Self::run_once(&self.pool, &mut op).await
     }
 
-    async fn run_once<T, F>(pool: &Pool<TursoManager>, op: &mut F) -> Result<T, LibraryError>
+    async fn run_once<T, F>(pool: &Pool<TursoManager>, op: &mut F) -> Result<T, CollectionError>
     where
-        F: AsyncFnMut(&mut Connection) -> Result<T, LibraryError>,
+        F: AsyncFnMut(&mut Connection) -> Result<T, CollectionError>,
     {
         let mut obj = pool.get().await?;
         // Constants count retries after the first attempt (not total attempts).
@@ -146,7 +146,7 @@ impl ReconnectableDb {
                     warn!(
                         %err,
                         attempt,
-                        "library database busy; retrying on the same pooled connection"
+                        "collection database busy; retrying on the same pooled connection"
                     );
                     Timer::after(BUSY_RETRY_DELAY).await;
                 }
@@ -225,38 +225,38 @@ mod tests {
     #[test]
     fn should_discard_covers_misuse_and_io_not_busy() {
         assert!(
-            !LibraryError::Database(turso::Error::Busy("locked".into()))
+            !CollectionError::Database(turso::Error::Busy("locked".into()))
                 .should_discard_pooled_connection()
         );
         assert!(
-            !LibraryError::Database(turso::Error::BusySnapshot("snapshot".into()))
+            !CollectionError::Database(turso::Error::BusySnapshot("snapshot".into()))
                 .should_discard_pooled_connection()
         );
         assert!(
-            LibraryError::Database(turso::Error::Misuse(
+            CollectionError::Database(turso::Error::Misuse(
                 "connection concurrent use forbidden".into()
             ))
             .should_discard_pooled_connection()
         );
         assert!(
-            LibraryError::Database(turso::Error::Misuse("inner connection must be set".into()))
+            CollectionError::Database(turso::Error::Misuse("inner connection must be set".into()))
                 .should_discard_pooled_connection()
         );
         assert!(
-            LibraryError::Database(turso::Error::IoError(ErrorKind::BrokenPipe, "read"))
+            CollectionError::Database(turso::Error::IoError(ErrorKind::BrokenPipe, "read"))
                 .should_discard_pooled_connection()
         );
         assert!(
-            !LibraryError::Database(turso::Error::Constraint("unique".into()))
+            !CollectionError::Database(turso::Error::Constraint("unique".into()))
                 .should_discard_pooled_connection()
         );
-        assert!(!LibraryError::PlaylistNotFound.should_discard_pooled_connection());
+        assert!(!CollectionError::PlaylistNotFound.should_discard_pooled_connection());
         assert!(
-            LibraryError::Database(turso::Error::Busy("database is locked".into()))
+            CollectionError::Database(turso::Error::Busy("database is locked".into()))
                 .is_database_busy()
         );
         assert!(
-            !LibraryError::Database(turso::Error::Misuse(
+            !CollectionError::Database(turso::Error::Misuse(
                 "connection concurrent use forbidden".into()
             ))
             .is_database_busy()
@@ -276,7 +276,7 @@ mod tests {
                     attempts += 1;
                     if attempts == 1 {
                         let _ = conn;
-                        return Err(LibraryError::Database(turso::Error::Misuse(
+                        return Err(CollectionError::Database(turso::Error::Misuse(
                             "connection concurrent use forbidden".into(),
                         )));
                     }
@@ -303,7 +303,7 @@ mod tests {
             let err = db
                 .run(async |_conn| {
                     attempts += 1;
-                    Err::<i64, _>(LibraryError::Database(turso::Error::Misuse(
+                    Err::<i64, _>(CollectionError::Database(turso::Error::Misuse(
                         "connection concurrent use forbidden".into(),
                     )))
                 })
@@ -329,7 +329,7 @@ mod tests {
                     attempts += 1;
                     if attempts < succeed_on {
                         let _ = conn;
-                        return Err(LibraryError::Database(turso::Error::Busy(
+                        return Err(CollectionError::Database(turso::Error::Busy(
                             "database is locked".into(),
                         )));
                     }
@@ -356,7 +356,7 @@ mod tests {
             let err = db
                 .run(async |_conn| {
                     attempts += 1;
-                    Err::<i64, _>(LibraryError::Database(turso::Error::Busy(
+                    Err::<i64, _>(CollectionError::Database(turso::Error::Busy(
                         "database is locked".into(),
                     )))
                 })

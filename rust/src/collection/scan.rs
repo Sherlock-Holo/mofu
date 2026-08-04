@@ -1,4 +1,4 @@
-//! Directory walking and media inspection helpers for the library.
+//! Directory walking and media inspection helpers for the collection.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,11 +10,11 @@ use super::model::Song;
 use crate::player::{MediaInspection, MediaInspector};
 
 /// Scans audio files and builds [`Song`] values via a [`MediaInspector`].
-pub(crate) struct LibraryScanner<'a> {
+pub(crate) struct CollectionScanner<'a> {
     inspector: &'a dyn MediaInspector,
 }
 
-impl<'a> LibraryScanner<'a> {
+impl<'a> CollectionScanner<'a> {
     pub(crate) fn new(inspector: &'a dyn MediaInspector) -> Self {
         Self { inspector }
     }

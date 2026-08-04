@@ -1,32 +1,32 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/src/rust/api/file_dialog.dart';
-import 'package:mofu/src/rust/api/library.dart';
 import 'package:mofu/src/rust/api/player.dart'
     show CoverArt, PlaybackMode, TrackMetadata;
 
 /// 曲库列表状态与目录/文件导入动作。
-class LibraryController extends ChangeNotifier {
-  LibraryController({Library? library})
-      : _library = library,
-        _ownsLibrary = library == null,
+class CollectionController extends ChangeNotifier {
+  CollectionController({Collection? collection})
+      : _collection = collection,
+        _ownsCollection = collection == null,
         _fake = false;
 
   /// 不连接 Rust，供 Widget 与 integration 测试注入。
   @visibleForTesting
-  LibraryController.fake({
+  CollectionController.fake({
     List<Playlist> playlists = const [],
     this._selectedId,
-  })  : _library = null,
-        _ownsLibrary = false,
+  })  : _collection = null,
+        _ownsCollection = false,
         _fake = true,
        _playlists = List<Playlist>.unmodifiable(playlists) {
     _ensureSelection();
   }
 
-  Library? _library;
-  final bool _ownsLibrary;
+  Collection? _collection;
+  final bool _ownsCollection;
   final bool _fake;
 
   List<Playlist> _playlists = const [];
@@ -70,8 +70,8 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Library> _requireLibrary() async {
-    return _library ??= await Library.newInstance();
+  Future<Collection> _requireCollection() async {
+    return _collection ??= await Collection.newInstance();
   }
 
   /// 单次 FFI 封面批量上限，避免巨大同步 payload。
@@ -89,8 +89,8 @@ class LibraryController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      final library = await _requireLibrary();
-      _playlists = await library.playlists();
+      final collection = await _requireCollection();
+      _playlists = await collection.playlists();
       _ensureSelection();
     } catch (err) {
       _error = err.toString();
@@ -117,12 +117,12 @@ class LibraryController extends ChangeNotifier {
       return;
     }
     try {
-      final library = await _requireLibrary();
+      final collection = await _requireCollection();
       final byPath = <String, CoverArt>{};
       for (var i = 0; i < paths.length; i += _coverHydrateChunkSize) {
         final end = (i + _coverHydrateChunkSize).clamp(0, paths.length);
         final chunk = paths.sublist(i, end);
-        final covers = await library.coversForPaths(paths: chunk);
+        final covers = await collection.coversForPaths(paths: chunk);
         for (final item in covers) {
           byPath[item.path] = item.cover;
         }
@@ -184,8 +184,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return PlaybackMode.sequential;
     }
-    final library = await _requireLibrary();
-    return library.playbackMode();
+    final collection = await _requireCollection();
+    return collection.playbackMode();
   }
 
   /// 将播放模式写入 catalog.db。
@@ -193,8 +193,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return;
     }
-    final library = await _requireLibrary();
-    await library.setPlaybackMode(mode: mode);
+    final collection = await _requireCollection();
+    await collection.setPlaybackMode(mode: mode);
   }
 
   /// 读取持久化音量；缺省为 `1.0`。
@@ -202,8 +202,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return 1;
     }
-    final library = await _requireLibrary();
-    return library.volume();
+    final collection = await _requireCollection();
+    return collection.volume();
   }
 
   /// 将音量写入 catalog.db（已在 Rust 侧 clamp 到 `[0, 1]`）。
@@ -211,8 +211,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return;
     }
-    final library = await _requireLibrary();
-    await library.setVolume(volume: volume);
+    final collection = await _requireCollection();
+    await collection.setVolume(volume: volume);
   }
 
   /// 读取持久化播放会话；无会话时为 null。
@@ -220,8 +220,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return null;
     }
-    final library = await _requireLibrary();
-    return library.playbackSession();
+    final collection = await _requireCollection();
+    return collection.playbackSession();
   }
 
   /// 将当前播放会话写入 catalog.db。
@@ -229,8 +229,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return;
     }
-    final library = await _requireLibrary();
-    await library.setPlaybackSession(session: session);
+    final collection = await _requireCollection();
+    await collection.setPlaybackSession(session: session);
   }
 
   /// 清除持久化播放会话。
@@ -238,8 +238,8 @@ class LibraryController extends ChangeNotifier {
     if (_fake) {
       return;
     }
-    final library = await _requireLibrary();
-    await library.clearPlaybackSession();
+    final collection = await _requireCollection();
+    await collection.clearPlaybackSession();
   }
 
   void selectPlaylist(BigInt id) {
@@ -266,8 +266,8 @@ class LibraryController extends ChangeNotifier {
     try {
       await action();
       if (!_fake) {
-        final library = await _requireLibrary();
-        _playlists = await library.playlists();
+        final collection = await _requireCollection();
+        _playlists = await collection.playlists();
       }
       _ensureSelection();
     } catch (err) {
@@ -299,8 +299,8 @@ class LibraryController extends ChangeNotifier {
         _selectedId = created.id;
         return;
       }
-      final library = await _requireLibrary();
-      final created = await library.createVirtual(name: trimmed);
+      final collection = await _requireCollection();
+      final created = await collection.createVirtual(name: trimmed);
       _selectedId = created.id;
     });
   }
@@ -327,8 +327,8 @@ class LibraryController extends ChangeNotifier {
         ];
         return;
       }
-      final library = await _requireLibrary();
-      await library.renameVirtual(id: id, name: trimmed);
+      final collection = await _requireCollection();
+      await collection.renameVirtual(id: id, name: trimmed);
     });
   }
 
@@ -344,8 +344,8 @@ class LibraryController extends ChangeNotifier {
         }
         return;
       }
-      final library = await _requireLibrary();
-      await library.deleteVirtual(id: id);
+      final collection = await _requireCollection();
+      await collection.deleteVirtual(id: id);
       if (_selectedId == id) {
         _selectedId = null;
       }
@@ -365,8 +365,8 @@ class LibraryController extends ChangeNotifier {
       if (_fake) {
         return;
       }
-      final library = await _requireLibrary();
-      await library.refresh(id: id);
+      final collection = await _requireCollection();
+      await collection.refresh(id: id);
     });
   }
 
@@ -380,8 +380,8 @@ class LibraryController extends ChangeNotifier {
       return;
     }
     await _mutate(() async {
-      final library = await _requireLibrary();
-      final created = await library.addDirectory(path: path);
+      final collection = await _requireCollection();
+      final created = await collection.addDirectory(path: path);
       _selectedId = created.id;
     });
   }
@@ -397,13 +397,13 @@ class LibraryController extends ChangeNotifier {
     }
 
     await _mutate(() async {
-      final library = await _requireLibrary();
+      final collection = await _requireCollection();
       var target = selectedPlaylist;
       if (target == null || target.kind != PlaylistKind.virtual) {
-        target = await library.createVirtual(name: '导入的歌曲');
+        target = await collection.createVirtual(name: '导入的歌曲');
         _selectedId = target.id;
       }
-      await library.addFiles(id: target.id, paths: paths);
+      await collection.addFiles(id: target.id, paths: paths);
     });
   }
 
@@ -442,8 +442,8 @@ class LibraryController extends ChangeNotifier {
         ];
         return;
       }
-      final library = await _requireLibrary();
-      await library.importFromPlaylist(
+      final collection = await _requireCollection();
+      await collection.importFromPlaylist(
         targetId: targetId,
         sourceId: sourceId,
         paths: paths,
@@ -462,8 +462,8 @@ class LibraryController extends ChangeNotifier {
 
   @override
   void dispose() {
-    if (_ownsLibrary) {
-      _library?.dispose();
+    if (_ownsCollection) {
+      _collection?.dispose();
     }
     super.dispose();
   }

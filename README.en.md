@@ -12,7 +12,7 @@ Local music player.
 
 ## Features
 
-- **Library management**: scan local music directories or add audio files manually; supports directory playlists and user-created virtual playlists
+- **Collection management**: scan local music directories or add audio files manually; supports directory playlists and user-created virtual playlists
 - **Playback controls**: play / pause / stop, seek, volume, playback queue
 - **Playback modes**: sequential, shuffle, repeat one, repeat all
 - **Metadata**: title, artist, album, cover art, and other tags
@@ -26,7 +26,7 @@ Local music player.
 | Bridge | flutter_rust_bridge 2.12 |
 | Audio decoding | [Symphonia](https://github.com/pdeljanov/Symphonia) |
 | Audio output | [CPAL](https://github.com/RustAudio/cpal) |
-| Library persistence | Turso (`catalog.db` / `lyrics.db`) + cover cache |
+| Collection persistence | Turso (`catalog.db` / `lyrics.db`) + cover cache |
 | Languages | Dart, Rust (Edition 2024) |
 
 ## Architecture
@@ -35,7 +35,7 @@ Local music player.
 flowchart LR
   subgraph Flutter
     UI[Widgets / Pages]
-    LC[LibraryController]
+    LC[CollectionController]
     PC[PlayerController]
     UI --> LC
     UI --> PC
@@ -44,21 +44,21 @@ flowchart LR
   subgraph Rust
     API[api/ FFI layer]
   subgraph Domain
-      LIB[library]
+      COL[collection]
       PLAY[player]
     end
-    API --> LIB
+    API --> COL
     API --> PLAY
     PLAY --> DEC[Symphonia decode]
     PLAY --> OUT[CPAL output]
-    LIB --> INS[metadata probe]
+    COL --> INS[metadata probe]
   end
 
   LC <-->|FRB| API
   PC <-->|FRB| API
 ```
 
-The Rust side is split by domain: `library` manages the persistent library and playlists; `player` runs decoding and output on a dedicated worker thread. Modules interact through traits and plain data DTOs; FFI types live in `rust/src/api/`.
+The Rust side is split by domain: `collection` manages the persistent collection and playlists; `player` runs decoding and output on a dedicated worker thread. Modules interact through traits and plain data DTOs; FFI types live in `rust/src/api/`.
 
 ## Project structure
 
@@ -67,14 +67,14 @@ mofu/
 ├── lib/                    # Flutter app
 │   ├── app/                # theme, routing, root widget
 │   ├── features/           # home, now-playing
-│   ├── library/            # library controller
+│   ├── collection/         # collection controller
 │   ├── player/             # player controller
 │   ├── widgets/            # shared widgets (playback bar, cover, etc.)
 │   └── src/rust/           # FRB-generated Dart bindings
 ├── rust/                   # Rust core library
 │   └── src/
-│       ├── api/            # FFI entry points (library, player)
-│       ├── library/        # library domain logic
+│       ├── api/            # FFI entry points (collection, player)
+│       ├── collection/     # collection domain logic
 │       └── player/         # player domain logic
 ├── rust_builder/           # Flutter plugin; CargoKit builds Rust
 ├── test/                   # widget tests
@@ -130,7 +130,7 @@ When contributing Rust code, follow the conventions in [`AGENTS.md`](AGENTS.md) 
 
 ## Supported audio formats
 
-Library scanning and playback support common extensions:
+Collection scanning and playback support common extensions:
 
 `aac` `aiff` `alac` `flac` `m4a` `mp3` `mp4` `ogg` `opus` `wav` `webm` `wma`
 
@@ -138,7 +138,7 @@ Actual decoding is provided by Symphonia; refer to its documentation for codec s
 
 ## Data storage
 
-Library persistence is split across XDG locations:
+Collection persistence is split across XDG locations:
 
 | Content | Default location (Linux) |
 |---------|--------------------------|
@@ -146,8 +146,7 @@ Library persistence is split across XDG locations:
 | Cover cache `covers/` | `~/.cache/mofu/covers/` (app cache dir) |
 
 - Application ID: `dev.mofu.mofu`
-- Use `Library::new_at` for a custom **data** directory; covers still use the platform cache
-- If a legacy `library.json` is present and the catalog is empty, it is migrated once and renamed to `library.json.migrated`
+- Use `Collection::new_at` for a custom **data** directory; covers still use the platform cache
 
 ## Platform support
 

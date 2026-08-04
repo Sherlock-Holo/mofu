@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mofu/app/theme.dart';
-import 'package:mofu/library/library_controller.dart';
+import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
-import 'package:mofu/src/rust/api/library.dart';
+import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:provider/provider.dart';
@@ -15,16 +15,16 @@ class CurrentTrackHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final library = context.watch<LibraryController>();
+    final collection = context.watch<CollectionController>();
     // 仅需调用 playAll，不订阅播放进度等无关状态。
     final player = context.read<PlayerController>();
-    final playlist = library.selectedPlaylist;
+    final playlist = collection.selectedPlaylist;
 
-    if (library.playlists.isEmpty) {
-      return _EmptyLibraryActions(
-        onOpenDirectory: library.pickAndAddDirectory,
-        onAddFiles: library.pickAndAddFiles,
-        loading: library.loading,
+    if (collection.playlists.isEmpty) {
+      return _EmptyCollectionActions(
+        onOpenDirectory: collection.pickAndAddDirectory,
+        onAddFiles: collection.pickAndAddFiles,
+        loading: collection.loading,
       );
     }
 
@@ -118,8 +118,8 @@ class CurrentTrackHeader extends StatelessWidget {
   }
 }
 
-class _EmptyLibraryActions extends StatelessWidget {
-  const _EmptyLibraryActions({
+class _EmptyCollectionActions extends StatelessWidget {
+  const _EmptyCollectionActions({
     required this.onOpenDirectory,
     required this.onAddFiles,
     required this.loading,

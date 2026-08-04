@@ -4,14 +4,14 @@ use super::decoder::DecoderSession;
 use super::error::PlayerError;
 use super::metadata::TrackMetadata;
 
-/// Metadata-only result shared with the library scanner.
+/// Metadata-only result shared with the collection scanner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaInspection {
     pub duration_ms: u64,
     pub metadata: TrackMetadata,
 }
 
-/// Media probe boundary used by the library without playback state.
+/// Media probe boundary used by the collection without playback state.
 pub trait MediaInspector: Send + Sync {
     fn inspect(&self, path: &Path) -> Result<MediaInspection, PlayerError>;
 }

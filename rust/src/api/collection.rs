@@ -3,13 +3,13 @@ use std::path::PathBuf;
 use crate::api::player::CoverArt;
 use crate::api::player::PlaybackMode;
 use crate::api::player::TrackMetadata;
-use crate::library::{
-    Library as DomainLibrary, LibraryError, PlaybackSession as DomainPlaybackSession,
+use crate::collection::{
+    Collection as DomainCollection, CollectionError, PlaybackSession as DomainPlaybackSession,
     Playlist as DomainPlaylist, PlaylistKind as DomainPlaylistKind, Song as DomainSong,
     StoredPlaybackMode,
 };
 
-fn map_err(err: LibraryError) -> String {
+fn map_err(err: CollectionError) -> String {
     err.to_string()
 }
 
@@ -31,26 +31,26 @@ fn ffi_playback_mode(mode: StoredPlaybackMode) -> PlaybackMode {
     }
 }
 
-/// FFI handle for the persistent local music library.
+/// FFI handle for the persistent local music collection.
 #[flutter_rust_bridge::frb(opaque)]
-pub struct Library {
-    inner: DomainLibrary,
+pub struct Collection {
+    inner: DomainCollection,
 }
 
-impl Library {
-    /// Open the library in the platform application data directory.
+impl Collection {
+    /// Open the collection in the platform application data directory.
     pub async fn new() -> Result<Self, String> {
         Ok(Self {
-            inner: DomainLibrary::open_default().await.map_err(map_err)?,
+            inner: DomainCollection::open_default().await.map_err(map_err)?,
         })
     }
 
-    /// Open the library under an explicit data directory.
+    /// Open the collection under an explicit data directory.
     ///
     /// Cover art still uses the platform XDG cache directory.
     pub async fn new_at(data_directory: String) -> Result<Self, String> {
         Ok(Self {
-            inner: DomainLibrary::open_at(PathBuf::from(data_directory))
+            inner: DomainCollection::open_at(PathBuf::from(data_directory))
                 .await
                 .map_err(map_err)?,
         })
@@ -206,7 +206,7 @@ pub enum PlaylistKind {
     Virtual,
 }
 
-/// One parsed library song.
+/// One parsed collection song.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Song {
     pub path: String,
@@ -214,7 +214,7 @@ pub struct Song {
     pub metadata: TrackMetadata,
 }
 
-/// Cover art for a single library path (async hydrate after lite playlists).
+/// Cover art for a single collection path (async hydrate after lite playlists).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SongCover {
     pub path: String,

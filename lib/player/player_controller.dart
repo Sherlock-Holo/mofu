@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:mofu/src/rust/api/library.dart' show PlaybackSession;
+import 'package:mofu/src/rust/api/collection.dart' show PlaybackSession;
 import 'package:mofu/src/rust/api/player.dart';
 
 class _PendingQueue {

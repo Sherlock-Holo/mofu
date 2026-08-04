@@ -3,9 +3,8 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-
 import '../frb_generated.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `map_err`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
@@ -52,10 +51,11 @@ abstract class Player implements RustOpaqueInterface {
   void setPlaybackMode({required PlaybackMode mode});
 
   /// Replace the playback queue and optionally prepare/start one item.
-  void setQueue(
-      {required List<String> paths,
-      BigInt? startIndex,
-      required bool autoplay});
+  void setQueue({
+    required List<String> paths,
+    BigInt? startIndex,
+    required bool autoplay,
+  });
 
   /// Set output volume. Values outside 0–1 are clamped.
   void setVolume({required double volume});
@@ -75,10 +75,7 @@ class CoverArt {
   final String? mimeType;
   final Uint8List data;
 
-  const CoverArt({
-    this.mimeType,
-    required this.data,
-  });
+  const CoverArt({this.mimeType, required this.data});
 
   @override
   int get hashCode => mimeType.hashCode ^ data.hashCode;
@@ -136,11 +133,7 @@ class LyricsContent {
   /// Set when [`LyricsContentKind::Timed`].
   final List<LyricsLine>? lines;
 
-  const LyricsContent({
-    required this.kind,
-    this.text,
-    this.lines,
-  });
+  const LyricsContent({required this.kind, this.text, this.lines});
 
   @override
   int get hashCode => kind.hashCode ^ text.hashCode ^ lines.hashCode;
@@ -156,11 +149,7 @@ class LyricsContent {
 }
 
 /// Lyrics body shape for Flutter FFI.
-enum LyricsContentKind {
-  plain,
-  timed,
-  ;
-}
+enum LyricsContentKind { plain, timed }
 
 /// One timed lyric line for Flutter FFI.
 class LyricsLine {
@@ -168,11 +157,7 @@ class LyricsLine {
   final BigInt? endMs;
   final String text;
 
-  const LyricsLine({
-    required this.startMs,
-    this.endMs,
-    required this.text,
-  });
+  const LyricsLine({required this.startMs, this.endMs, required this.text});
 
   @override
   int get hashCode => startMs.hashCode ^ endMs.hashCode ^ text.hashCode;
@@ -188,20 +173,10 @@ class LyricsLine {
 }
 
 /// Lyrics source for Flutter FFI.
-enum LyricsSource {
-  embedded,
-  externalFile,
-  ;
-}
+enum LyricsSource { embedded, externalFile }
 
 /// Queue navigation behavior for Flutter FFI.
-enum PlaybackMode {
-  sequential,
-  shuffle,
-  repeatOne,
-  repeatAll,
-  ;
-}
+enum PlaybackMode { sequential, shuffle, repeatOne, repeatAll }
 
 /// Unified state for polling from Flutter.
 class PlayerSnapshot {
@@ -252,24 +227,14 @@ class PlayerSnapshot {
 }
 
 /// Playback state for Flutter FFI.
-enum PlayerState {
-  idle,
-  ready,
-  playing,
-  paused,
-  ended,
-  ;
-}
+enum PlayerState { idle, ready, playing, paused, ended }
 
 /// One queue item in a unified player snapshot.
 class QueueItem {
   final BigInt index;
   final String path;
 
-  const QueueItem({
-    required this.index,
-    required this.path,
-  });
+  const QueueItem({required this.index, required this.path});
 
   @override
   int get hashCode => index.hashCode ^ path.hashCode;

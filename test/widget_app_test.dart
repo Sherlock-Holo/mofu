@@ -5,9 +5,9 @@ import 'package:mofu/app/theme.dart';
 import 'package:mofu/features/now_playing/now_playing_page.dart';
 import 'package:mofu/features/now_playing/widgets/lyrics_panel.dart';
 import 'package:mofu/features/now_playing/widgets/rotating_cover.dart';
-import 'package:mofu/library/library_controller.dart';
+import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
-import 'package:mofu/src/rust/api/library.dart';
+import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/playback_mode_button.dart';
 import 'package:provider/provider.dart';
@@ -119,7 +119,7 @@ PlayerSnapshot _playingSnapshot({
 
 Future<void> _pumpApp(
   WidgetTester tester, {
-  required LibraryController library,
+  required CollectionController collection,
   required PlayerController player,
   Size size = const Size(1200, 800),
 }) async {
@@ -132,7 +132,7 @@ Future<void> _pumpApp(
 
   await tester.pumpWidget(
     MofuApp(
-      libraryController: library,
+      collectionController: collection,
       playerController: player,
     ),
   );
@@ -183,13 +183,13 @@ void main() {
   group('HomePage', () {
     testWidgets('wide layout shows sidebar, song table and playback bar',
         (tester) async {
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist(), _virtualPlaylist()],
         selectedId: BigInt.one,
       );
       final player = PlayerController.fake(snapshot: _playingSnapshot());
 
-      await _pumpApp(tester, library: library, player: player);
+      await _pumpApp(tester, collection: collection, player: player);
 
       expect(find.text('Mofu'), findsNothing);
       expect(find.text('目录'), findsWidgets);
@@ -204,13 +204,13 @@ void main() {
     });
 
     testWidgets('selecting playlist updates song table', (tester) async {
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist(), _virtualPlaylist()],
         selectedId: BigInt.one,
       );
       final player = PlayerController.fake();
 
-      await _pumpApp(tester, library: library, player: player);
+      await _pumpApp(tester, collection: collection, player: player);
 
       expect(find.text('草莓糖'), findsOneWidget);
       expect(find.text('午后茶'), findsNothing);
@@ -219,7 +219,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(library.selectedId, BigInt.from(2));
+      expect(collection.selectedId, BigInt.from(2));
       expect(find.text('午后茶'), findsOneWidget);
       expect(find.text('奶油云'), findsNothing);
     });
@@ -232,13 +232,13 @@ void main() {
         kind: PlaylistKind.virtual,
         songs: const [],
       );
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist(), emptyVirtual],
         selectedId: BigInt.one,
       );
       final player = PlayerController.fake(snapshot: _playingSnapshot());
 
-      await _pumpApp(tester, library: library, player: player);
+      await _pumpApp(tester, collection: collection, player: player);
 
       // 正在播「草莓糖」，但头部应是浏览中的「本地音乐」。
       expect(find.text('本地音乐'), findsWidgets);
@@ -257,13 +257,13 @@ void main() {
 
     testWidgets('play all loads browsed playlist into queue from start',
         (tester) async {
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist(), _virtualPlaylist()],
         selectedId: BigInt.from(2),
       );
       final player = PlayerController.fake();
 
-      await _pumpApp(tester, library: library, player: player);
+      await _pumpApp(tester, collection: collection, player: player);
 
       expect(find.text('播放全部'), findsOneWidget);
       await tester.tap(find.text('播放全部'));
@@ -277,13 +277,13 @@ void main() {
 
     testWidgets('playback mode button on home bar is wired to player',
         (tester) async {
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
       );
       final player = PlayerController.fake(snapshot: _playingSnapshot());
 
-      await _pumpApp(tester, library: library, player: player);
+      await _pumpApp(tester, collection: collection, player: player);
 
       expect(find.byType(PlaybackModeButton), findsOneWidget);
       expect(find.byTooltip('顺序播放'), findsOneWidget);
@@ -298,15 +298,15 @@ void main() {
     testWidgets('pause persists playback session with playlist and path',
         (tester) async {
       PlaybackSession? saved;
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
       );
       final player = PlayerController.fake(snapshot: _playingSnapshot());
       player.sourcePlaylistId = BigInt.one;
 
-      await _pumpApp(tester, library: library, player: player);
-      // initState 会先接到 LibraryController；测试覆盖后再验证触发。
+      await _pumpApp(tester, collection: collection, player: player);
+      // initState 会先接到 CollectionController；测试覆盖后再验证触发。
       player.persistPlaybackSession = (session) async {
         saved = session;
       };
@@ -320,13 +320,13 @@ void main() {
 
     testWidgets('volume persist uses trailing 400ms debounce', (tester) async {
       final volumes = <double>[];
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
       );
       final player = PlayerController.fake();
 
-      await _pumpApp(tester, library: library, player: player);
+      await _pumpApp(tester, collection: collection, player: player);
       player.persistVolume = (volume) async {
         volumes.add(volume);
       };
@@ -345,7 +345,7 @@ void main() {
 
     testWidgets('narrow layout uses drawer instead of persistent sidebar',
         (tester) async {
-      final library = LibraryController.fake(
+      final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
       );
@@ -353,7 +353,7 @@ void main() {
 
       await _pumpApp(
         tester,
-        library: library,
+        collection: collection,
         player: player,
         size: const Size(700, 900),
       );

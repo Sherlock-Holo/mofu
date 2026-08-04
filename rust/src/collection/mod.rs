@@ -1,4 +1,4 @@
-//! Persistent local media library and user-managed playlists.
+//! Persistent local media collection and user-managed playlists.
 
 mod cover_store;
 mod error;
@@ -12,12 +12,12 @@ use std::path::{Path, PathBuf};
 
 use cover_store::CoverStore;
 use directories::ProjectDirs;
-pub use error::LibraryError;
+pub use error::CollectionError;
 pub(crate) use model::StoredPlaybackMode;
 pub use model::{PlaybackSession, Playlist, PlaylistId, PlaylistKind, Song};
 use model::{SongId, SongRow, SongTags};
-use scan::LibraryScanner;
-use store::{CatalogStore, JsonMigrator};
+use scan::CollectionScanner;
+use store::CatalogStore;
 
 use crate::player::metadata::{CoverArt, TrackMetadata};
 use crate::player::{MediaInspector, SymphoniaMediaInspector};
@@ -25,21 +25,21 @@ use crate::player::{MediaInspector, SymphoniaMediaInspector};
 const CATALOG_FILE_NAME: &str = "catalog.db";
 const COVERS_DIR_NAME: &str = "covers";
 
-/// Persistent library service backed by Turso catalog + cover cache.
+/// Persistent collection service backed by Turso catalog + cover cache.
 ///
-/// Lyrics are not stored in the library DB; playback loads them from the media
+/// Lyrics are not stored in the collection DB; playback loads them from the media
 /// file / sidecar at decode time. Any leftover `lyrics.db` on disk is unused.
-pub(crate) struct Library {
+pub(crate) struct Collection {
     catalog: CatalogStore,
     covers: CoverStore,
     inspector: Box<dyn MediaInspector>,
 }
 
-impl Library {
-    /// Open the library using platform data + cache directories.
-    pub(crate) async fn open_default() -> Result<Self, LibraryError> {
+impl Collection {
+    /// Open the collection using platform data + cache directories.
+    pub(crate) async fn open_default() -> Result<Self, CollectionError> {
         let dirs = ProjectDirs::from("dev", "mofu", "mofu")
-            .ok_or(LibraryError::DataDirectoryUnavailable)?;
+            .ok_or(CollectionError::DataDirectoryUnavailable)?;
         Self::open_at_dirs(
             dirs.data_dir().to_path_buf(),
             dirs.cache_dir().join(COVERS_DIR_NAME),
@@ -48,10 +48,10 @@ impl Library {
     }
 
     /// Open under an explicit data directory; covers use the platform cache.
-    pub(crate) async fn open_at(data_dir: PathBuf) -> Result<Self, LibraryError> {
+    pub(crate) async fn open_at(data_dir: PathBuf) -> Result<Self, CollectionError> {
         let cache_dir = ProjectDirs::from("dev", "mofu", "mofu")
             .map(|dirs| dirs.cache_dir().join(COVERS_DIR_NAME))
-            .ok_or(LibraryError::CacheDirectoryUnavailable)?;
+            .ok_or(CollectionError::CacheDirectoryUnavailable)?;
         Self::open_at_dirs(data_dir, cache_dir).await
     }
 
@@ -59,7 +59,7 @@ impl Library {
     pub(crate) async fn open_at_dirs(
         data_dir: PathBuf,
         cache_dir: PathBuf,
-    ) -> Result<Self, LibraryError> {
+    ) -> Result<Self, CollectionError> {
         Self::open_with_inspector(data_dir, cache_dir, Box::new(SymphoniaMediaInspector)).await
     }
 
@@ -67,11 +67,10 @@ impl Library {
         data_dir: PathBuf,
         cache_dir: PathBuf,
         inspector: Box<dyn MediaInspector>,
-    ) -> Result<Self, LibraryError> {
+    ) -> Result<Self, CollectionError> {
         fs::create_dir_all(&data_dir)?;
         let catalog = CatalogStore::open(&data_dir.join(CATALOG_FILE_NAME)).await?;
         let covers = CoverStore::open(cache_dir)?;
-        JsonMigrator::run(&data_dir, &catalog, &covers).await?;
         Ok(Self {
             catalog,
             covers,
@@ -79,7 +78,7 @@ impl Library {
         })
     }
 
-    pub(crate) async fn playlists(&self) -> Result<Vec<Playlist>, LibraryError> {
+    pub(crate) async fn playlists(&self) -> Result<Vec<Playlist>, CollectionError> {
         let rows = self.catalog.list_playlist_rows().await?;
         let mut playlists = Vec::with_capacity(rows.len());
         for row in rows {
@@ -94,7 +93,7 @@ impl Library {
         Ok(playlists)
     }
 
-    pub(crate) async fn create_virtual(&self, name: String) -> Result<Playlist, LibraryError> {
+    pub(crate) async fn create_virtual(&self, name: String) -> Result<Playlist, CollectionError> {
         let name = Self::validated_name(name)?;
         let id = self.catalog.next_playlist_id().await?;
         self.catalog
@@ -108,10 +107,10 @@ impl Library {
         })
     }
 
-    pub(crate) async fn add_directory(&self, path: PathBuf) -> Result<Playlist, LibraryError> {
+    pub(crate) async fn add_directory(&self, path: PathBuf) -> Result<Playlist, CollectionError> {
         let canonical = fs::canonicalize(path)?;
         let path_string = canonical.to_string_lossy().into_owned();
-        let songs = LibraryScanner::new(self.inspector.as_ref()).scan_directory(&canonical);
+        let songs = CollectionScanner::new(self.inspector.as_ref()).scan_directory(&canonical);
         let name = canonical
             .file_name()
             .and_then(|name| name.to_str())
@@ -151,19 +150,19 @@ impl Library {
         &self,
         id: PlaylistId,
         name: String,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         let name = Self::validated_name(name)?;
         let row = self.catalog.playlist_row(id).await?;
         if row.kind != PlaylistKind::Virtual {
-            return Err(LibraryError::NotVirtualPlaylist);
+            return Err(CollectionError::NotVirtualPlaylist);
         }
         self.catalog.rename_playlist(id, &name).await
     }
 
-    pub(crate) async fn delete_virtual(&self, id: PlaylistId) -> Result<(), LibraryError> {
+    pub(crate) async fn delete_virtual(&self, id: PlaylistId) -> Result<(), CollectionError> {
         let row = self.catalog.playlist_row(id).await?;
         if row.kind != PlaylistKind::Virtual {
-            return Err(LibraryError::NotVirtualPlaylist);
+            return Err(CollectionError::NotVirtualPlaylist);
         }
         self.catalog.delete_playlist(id).await?;
         self.garbage_collect().await
@@ -173,12 +172,12 @@ impl Library {
         &self,
         id: PlaylistId,
         paths: Vec<PathBuf>,
-    ) -> Result<usize, LibraryError> {
+    ) -> Result<usize, CollectionError> {
         let row = self.catalog.playlist_row(id).await?;
         if row.kind != PlaylistKind::Virtual {
-            return Err(LibraryError::NotVirtualPlaylist);
+            return Err(CollectionError::NotVirtualPlaylist);
         }
-        let inspected = LibraryScanner::new(self.inspector.as_ref()).inspect_paths(paths);
+        let inspected = CollectionScanner::new(self.inspector.as_ref()).inspect_paths(paths);
         let mut existing = self
             .catalog
             .songs_for_playlist(id)
@@ -205,10 +204,10 @@ impl Library {
         target_id: PlaylistId,
         source_id: PlaylistId,
         paths: Vec<String>,
-    ) -> Result<usize, LibraryError> {
+    ) -> Result<usize, CollectionError> {
         let target = self.catalog.playlist_row(target_id).await?;
         if target.kind != PlaylistKind::Virtual {
-            return Err(LibraryError::NotVirtualPlaylist);
+            return Err(CollectionError::NotVirtualPlaylist);
         }
         let _source = self.catalog.playlist_row(source_id).await?;
         let selected = paths.into_iter().collect::<HashSet<_>>();
@@ -238,11 +237,11 @@ impl Library {
         Ok(added)
     }
 
-    pub(crate) async fn refresh(&self, id: PlaylistId) -> Result<Playlist, LibraryError> {
+    pub(crate) async fn refresh(&self, id: PlaylistId) -> Result<Playlist, CollectionError> {
         let row = self.catalog.playlist_row(id).await?;
         let songs = match &row.kind {
             PlaylistKind::Directory { path } => {
-                LibraryScanner::new(self.inspector.as_ref()).scan_directory(Path::new(path))
+                CollectionScanner::new(self.inspector.as_ref()).scan_directory(Path::new(path))
             }
             PlaylistKind::Virtual => {
                 let paths = self
@@ -252,7 +251,7 @@ impl Library {
                     .into_iter()
                     .map(PathBuf::from)
                     .collect::<Vec<_>>();
-                LibraryScanner::new(self.inspector.as_ref()).inspect_paths(paths)
+                CollectionScanner::new(self.inspector.as_ref()).inspect_paths(paths)
             }
         };
         let song_ids = self.persist_songs(&songs).await?;
@@ -261,7 +260,7 @@ impl Library {
         self.playlist_by_id(id).await
     }
 
-    async fn playlist_by_id(&self, id: PlaylistId) -> Result<Playlist, LibraryError> {
+    async fn playlist_by_id(&self, id: PlaylistId) -> Result<Playlist, CollectionError> {
         let row = self.catalog.playlist_row(id).await?;
         let songs = self.load_songs_for_playlist(id).await?;
         Ok(Playlist {
@@ -276,7 +275,7 @@ impl Library {
     pub(crate) async fn covers_for_paths(
         &self,
         paths: Vec<String>,
-    ) -> Result<Vec<(String, CoverArt)>, LibraryError> {
+    ) -> Result<Vec<(String, CoverArt)>, CollectionError> {
         if paths.is_empty() {
             return Ok(Vec::new());
         }
@@ -297,7 +296,7 @@ impl Library {
     async fn load_songs_for_playlist(
         &self,
         playlist_id: PlaylistId,
-    ) -> Result<Vec<Song>, LibraryError> {
+    ) -> Result<Vec<Song>, CollectionError> {
         let rows = self.catalog.songs_for_playlist(playlist_id).await?;
         let mut songs = Vec::with_capacity(rows.len());
         for row in rows {
@@ -333,7 +332,7 @@ impl Library {
         }
     }
 
-    async fn persist_songs(&self, songs: &[Song]) -> Result<Vec<SongId>, LibraryError> {
+    async fn persist_songs(&self, songs: &[Song]) -> Result<Vec<SongId>, CollectionError> {
         let mut ids = Vec::with_capacity(songs.len());
         for song in songs {
             ids.push(self.persist_song(song).await?);
@@ -341,7 +340,7 @@ impl Library {
         Ok(ids)
     }
 
-    async fn persist_song(&self, song: &Song) -> Result<SongId, LibraryError> {
+    async fn persist_song(&self, song: &Song) -> Result<SongId, CollectionError> {
         let tags = SongTags::from_metadata(&song.metadata, None);
         let song_id = self
             .catalog
@@ -359,7 +358,7 @@ impl Library {
             .await
     }
 
-    async fn garbage_collect(&self) -> Result<(), LibraryError> {
+    async fn garbage_collect(&self) -> Result<(), CollectionError> {
         let orphans = self.catalog.garbage_collect_orphan_songs().await?;
         for (song_id, cover_ext) in orphans {
             if let Some(ext) = cover_ext {
@@ -371,44 +370,46 @@ impl Library {
         Ok(())
     }
 
-    pub(crate) async fn playback_mode(&self) -> Result<StoredPlaybackMode, LibraryError> {
+    pub(crate) async fn playback_mode(&self) -> Result<StoredPlaybackMode, CollectionError> {
         self.catalog.playback_mode().await
     }
 
     pub(crate) async fn set_playback_mode(
         &self,
         mode: StoredPlaybackMode,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         self.catalog.set_playback_mode(mode).await
     }
 
-    pub(crate) async fn volume(&self) -> Result<f64, LibraryError> {
+    pub(crate) async fn volume(&self) -> Result<f64, CollectionError> {
         self.catalog.volume().await
     }
 
-    pub(crate) async fn set_volume(&self, volume: f64) -> Result<(), LibraryError> {
+    pub(crate) async fn set_volume(&self, volume: f64) -> Result<(), CollectionError> {
         self.catalog.set_volume(volume).await
     }
 
-    pub(crate) async fn playback_session(&self) -> Result<Option<PlaybackSession>, LibraryError> {
+    pub(crate) async fn playback_session(
+        &self,
+    ) -> Result<Option<PlaybackSession>, CollectionError> {
         self.catalog.playback_session().await
     }
 
     pub(crate) async fn set_playback_session(
         &self,
         session: PlaybackSession,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         self.catalog.set_playback_session(&session).await
     }
 
-    pub(crate) async fn clear_playback_session(&self) -> Result<(), LibraryError> {
+    pub(crate) async fn clear_playback_session(&self) -> Result<(), CollectionError> {
         self.catalog.clear_playback_session().await
     }
 
-    fn validated_name(name: String) -> Result<String, LibraryError> {
+    fn validated_name(name: String) -> Result<String, CollectionError> {
         let name = name.trim().to_owned();
         if name.is_empty() {
-            Err(LibraryError::EmptyPlaylistName)
+            Err(CollectionError::EmptyPlaylistName)
         } else {
             Ok(name)
         }
@@ -419,10 +420,8 @@ impl Library {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::model::LibraryManifest;
     use super::store::CatalogStore;
     use super::*;
-    use crate::player::metadata::CoverArt;
     use crate::player::{MediaInspection, PlayerError};
 
     struct FakeInspector;
@@ -452,8 +451,8 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .expect("clock after epoch")
                 .as_nanos();
-            let base =
-                std::env::temp_dir().join(format!("mofu-library-{}-{nonce}", std::process::id()));
+            let base = std::env::temp_dir()
+                .join(format!("mofu-collection-{}-{nonce}", std::process::id()));
             let data = base.join("data");
             let cache = base.join("cache");
             fs::create_dir_all(&data).expect("create data dir");
@@ -468,14 +467,14 @@ mod tests {
         }
     }
 
-    async fn open_test_library(dirs: &TestDirs) -> Library {
-        Library::open_with_inspector(
+    async fn open_test_collection(dirs: &TestDirs) -> Collection {
+        Collection::open_with_inspector(
             dirs.data.clone(),
             dirs.cache.clone(),
             Box::new(FakeInspector),
         )
         .await
-        .expect("open library")
+        .expect("open collection")
     }
 
     #[test]
@@ -485,20 +484,20 @@ mod tests {
             let media = dirs.data.join("song.mp3");
             fs::write(&media, b"fake").expect("write media");
             {
-                let library = open_test_library(&dirs).await;
-                let playlist = library
+                let collection = open_test_collection(&dirs).await;
+                let playlist = collection
                     .create_virtual("Favorites".into())
                     .await
                     .expect("create");
                 assert_eq!(
-                    library
+                    collection
                         .add_files(playlist.id, vec![media.clone(), media.clone()])
                         .await
                         .expect("add"),
                     1
                 );
             }
-            let reopened = open_test_library(&dirs).await;
+            let reopened = open_test_collection(&dirs).await;
             let playlists = reopened.playlists().await.expect("playlists");
             assert_eq!(playlists.len(), 1);
             assert_eq!(playlists[0].songs.len(), 1);
@@ -511,14 +510,17 @@ mod tests {
             let dirs = TestDirs::new();
             let media = dirs.data.join("song.flac");
             fs::write(&media, b"fake").expect("write media");
-            let library = open_test_library(&dirs).await;
-            let playlist = library.create_virtual("List".into()).await.expect("create");
-            library
+            let collection = open_test_collection(&dirs).await;
+            let playlist = collection
+                .create_virtual("List".into())
+                .await
+                .expect("create");
+            collection
                 .add_files(playlist.id, vec![media.clone()])
                 .await
                 .expect("add");
             fs::remove_file(media).expect("remove media");
-            let refreshed = library.refresh(playlist.id).await.expect("refresh");
+            let refreshed = collection.refresh(playlist.id).await.expect("refresh");
             assert!(refreshed.songs.is_empty());
         });
     }
@@ -532,8 +534,8 @@ mod tests {
             fs::write(dirs.data.join("first.mp3"), b"fake").expect("write first media");
             fs::write(nested.join("second.flac"), b"fake").expect("write second media");
             fs::write(nested.join("notes.txt"), b"not media").expect("write text");
-            let library = open_test_library(&dirs).await;
-            let playlist = library
+            let collection = open_test_collection(&dirs).await;
+            let playlist = collection
                 .add_directory(dirs.data.clone())
                 .await
                 .expect("add directory");
@@ -543,144 +545,21 @@ mod tests {
     }
 
     #[test]
-    fn json_manifest_migrates_into_turso() {
-        futures_executor::block_on(async {
-            let dirs = TestDirs::new();
-            let manifest = LibraryManifest {
-                next_id: 2,
-                playlists: vec![Playlist {
-                    id: 1,
-                    name: "Legacy".into(),
-                    kind: PlaylistKind::Virtual,
-                    songs: vec![Song {
-                        path: "/tmp/legacy.mp3".into(),
-                        duration_ms: 10,
-                        metadata: TrackMetadata {
-                            title: Some("Legacy Song".into()),
-                            cover: Some(CoverArt {
-                                mime_type: Some("image/png".into()),
-                                data: vec![1, 2, 3, 4],
-                            }),
-                            ..Default::default()
-                        },
-                    }],
-                }],
-            };
-            fs::write(
-                dirs.data.join("library.json"),
-                serde_json::to_vec_pretty(&manifest).expect("serialize"),
-            )
-            .expect("write manifest");
-            let library = open_test_library(&dirs).await;
-            let playlists = library.playlists().await.expect("playlists");
-            assert_eq!(playlists.len(), 1);
-            assert_eq!(playlists[0].name, "Legacy");
-            assert_eq!(playlists[0].songs.len(), 1);
-            assert_eq!(
-                playlists[0].songs[0].metadata.title.as_deref(),
-                Some("Legacy Song")
-            );
-            assert!(playlists[0].songs[0].metadata.cover.is_none());
-            let covers = library
-                .covers_for_paths(vec!["/tmp/legacy.mp3".into()])
-                .await
-                .expect("covers");
-            assert_eq!(covers.len(), 1);
-            assert_eq!(covers[0].0, "/tmp/legacy.mp3");
-            assert_eq!(covers[0].1.data, vec![1, 2, 3, 4]);
-            assert!(!dirs.data.join("library.json").exists());
-            assert!(dirs.data.join("library.json.migrated").exists());
-        });
-    }
-
-    #[test]
-    fn partial_json_migration_wipes_and_reimports() {
-        futures_executor::block_on(async {
-            let dirs = TestDirs::new();
-            let manifest = LibraryManifest {
-                next_id: 3,
-                playlists: vec![
-                    Playlist {
-                        id: 1,
-                        name: "First".into(),
-                        kind: PlaylistKind::Virtual,
-                        songs: vec![Song {
-                            path: "/tmp/first.mp3".into(),
-                            duration_ms: 10,
-                            metadata: TrackMetadata {
-                                title: Some("Song One".into()),
-                                ..Default::default()
-                            },
-                        }],
-                    },
-                    Playlist {
-                        id: 2,
-                        name: "Second".into(),
-                        kind: PlaylistKind::Virtual,
-                        songs: vec![Song {
-                            path: "/tmp/second.mp3".into(),
-                            duration_ms: 20,
-                            metadata: TrackMetadata {
-                                title: Some("Song Two".into()),
-                                ..Default::default()
-                            },
-                        }],
-                    },
-                ],
-            };
-            fs::write(
-                dirs.data.join("library.json"),
-                serde_json::to_vec_pretty(&manifest).expect("serialize"),
-            )
-            .expect("write manifest");
-
-            // Simulate a partial migration: only the first playlist header was written.
-            {
-                let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
-                    .await
-                    .expect("open catalog");
-                catalog
-                    .insert_playlist(1, "Stale Partial", &PlaylistKind::Virtual)
-                    .await
-                    .expect("insert partial playlist");
-            }
-
-            let library = open_test_library(&dirs).await;
-            let playlists = library.playlists().await.expect("playlists");
-            assert_eq!(playlists.len(), 2);
-            assert_eq!(playlists[0].name, "First");
-            assert_eq!(playlists[0].songs.len(), 1);
-            assert_eq!(
-                playlists[0].songs[0].metadata.title.as_deref(),
-                Some("Song One")
-            );
-            assert_eq!(playlists[1].name, "Second");
-            assert_eq!(playlists[1].songs.len(), 1);
-            assert_eq!(
-                playlists[1].songs[0].metadata.title.as_deref(),
-                Some("Song Two")
-            );
-            assert!(!dirs.data.join("library.json").exists());
-            assert!(dirs.data.join("library.json.migrated").exists());
-        });
-    }
-
-    #[test]
     fn cover_cache_missing_file_yields_no_cover() {
         futures_executor::block_on(async {
             let dirs = TestDirs::new();
-            let library = open_test_library(&dirs).await;
-            let playlist = library
+            let collection = open_test_collection(&dirs).await;
+            let playlist = collection
                 .create_virtual("Covers".into())
                 .await
                 .expect("create");
             let media = dirs.data.join("art.mp3");
             fs::write(&media, b"fake").expect("write");
-            library
+            collection
                 .add_files(playlist.id, vec![media])
                 .await
                 .expect("add");
-            let playlists = library.playlists().await.expect("list");
+            let playlists = collection.playlists().await.expect("list");
             assert!(playlists[0].songs[0].metadata.cover.is_none());
         });
     }
@@ -690,21 +569,21 @@ mod tests {
         futures_executor::block_on(async {
             let dirs = TestDirs::new();
             {
-                let library = open_test_library(&dirs).await;
+                let collection = open_test_collection(&dirs).await;
                 assert_eq!(
-                    library.playback_mode().await.expect("default"),
+                    collection.playback_mode().await.expect("default"),
                     StoredPlaybackMode::Sequential
                 );
-                library
+                collection
                     .set_playback_mode(StoredPlaybackMode::Shuffle)
                     .await
                     .expect("set");
                 assert_eq!(
-                    library.playback_mode().await.expect("read"),
+                    collection.playback_mode().await.expect("read"),
                     StoredPlaybackMode::Shuffle
                 );
             }
-            let reopened = open_test_library(&dirs).await;
+            let reopened = open_test_collection(&dirs).await;
             assert_eq!(
                 reopened.playback_mode().await.expect("reopen"),
                 StoredPlaybackMode::Shuffle
@@ -724,15 +603,15 @@ mod tests {
     fn concurrent_meta_reads_do_not_fail() {
         futures_executor::block_on(async {
             let dirs = TestDirs::new();
-            let library = open_test_library(&dirs).await;
-            library
+            let collection = open_test_collection(&dirs).await;
+            collection
                 .set_playback_mode(StoredPlaybackMode::RepeatAll)
                 .await
                 .expect("set");
             let (mode, volume, session) = futures_util::join!(
-                library.playback_mode(),
-                library.volume(),
-                library.playback_session(),
+                collection.playback_mode(),
+                collection.volume(),
+                collection.playback_session(),
             );
             assert_eq!(mode.expect("mode"), StoredPlaybackMode::RepeatAll);
             assert_eq!(volume.expect("volume"), 1.0);
@@ -744,12 +623,12 @@ mod tests {
     fn concurrent_meta_read_and_write_do_not_fail() {
         futures_executor::block_on(async {
             let dirs = TestDirs::new();
-            let library = open_test_library(&dirs).await;
-            library.set_volume(0.25).await.expect("seed volume");
+            let collection = open_test_collection(&dirs).await;
+            collection.set_volume(0.25).await.expect("seed volume");
             let (set_mode, volume, set_volume) = futures_util::join!(
-                library.set_playback_mode(StoredPlaybackMode::RepeatOne),
-                library.volume(),
-                library.set_volume(0.75),
+                collection.set_playback_mode(StoredPlaybackMode::RepeatOne),
+                collection.volume(),
+                collection.set_volume(0.75),
             );
             set_mode.expect("set mode");
             let mid_volume = volume.expect("volume");
@@ -760,10 +639,10 @@ mod tests {
             );
             set_volume.expect("set volume");
             assert_eq!(
-                library.playback_mode().await.expect("mode"),
+                collection.playback_mode().await.expect("mode"),
                 StoredPlaybackMode::RepeatOne
             );
-            assert!((library.volume().await.expect("final volume") - 0.75).abs() < f64::EPSILON);
+            assert!((collection.volume().await.expect("final volume") - 0.75).abs() < f64::EPSILON);
         });
     }
 
@@ -771,10 +650,13 @@ mod tests {
     fn volume_and_session_default_when_missing() {
         futures_executor::block_on(async {
             let dirs = TestDirs::new();
-            let library = open_test_library(&dirs).await;
-            assert_eq!(library.volume().await.expect("default volume"), 1.0);
+            let collection = open_test_collection(&dirs).await;
+            assert_eq!(collection.volume().await.expect("default volume"), 1.0);
             assert_eq!(
-                library.playback_session().await.expect("default session"),
+                collection
+                    .playback_session()
+                    .await
+                    .expect("default session"),
                 None
             );
         });
@@ -790,19 +672,21 @@ mod tests {
                 position_ms: 12_345,
             };
             {
-                let library = open_test_library(&dirs).await;
-                library.set_volume(0.42).await.expect("set volume");
-                library
+                let collection = open_test_collection(&dirs).await;
+                collection.set_volume(0.42).await.expect("set volume");
+                collection
                     .set_playback_session(session.clone())
                     .await
                     .expect("set session");
-                assert!((library.volume().await.expect("read volume") - 0.42).abs() < f64::EPSILON);
+                assert!(
+                    (collection.volume().await.expect("read volume") - 0.42).abs() < f64::EPSILON
+                );
                 assert_eq!(
-                    library.playback_session().await.expect("read session"),
+                    collection.playback_session().await.expect("read session"),
                     Some(session.clone())
                 );
             }
-            let reopened = open_test_library(&dirs).await;
+            let reopened = open_test_collection(&dirs).await;
             assert!((reopened.volume().await.expect("reopen volume") - 0.42).abs() < f64::EPSILON);
             assert_eq!(
                 reopened.playback_session().await.expect("reopen session"),
@@ -834,13 +718,16 @@ mod tests {
                     .await
                     .expect("plant corrupt session");
             }
-            let library = open_test_library(&dirs).await;
+            let collection = open_test_collection(&dirs).await;
             assert_eq!(
-                library.playback_session().await.expect("corrupt cleared"),
+                collection
+                    .playback_session()
+                    .await
+                    .expect("corrupt cleared"),
                 None
             );
             assert_eq!(
-                library.playback_session().await.expect("stays cleared"),
+                collection.playback_session().await.expect("stays cleared"),
                 None
             );
         });

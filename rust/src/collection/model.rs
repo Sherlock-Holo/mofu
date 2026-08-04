@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::player::metadata::TrackMetadata;
 
-/// Stable playlist identifier persisted in the library catalog.
+/// Stable playlist identifier persisted in the collection catalog.
 pub type PlaylistId = u64;
 
 /// Database-assigned song row identifier.
@@ -53,8 +53,8 @@ impl CoverExt {
     pub(crate) const ALL: [Self; 5] = [Self::Jpg, Self::Png, Self::Webp, Self::Gif, Self::Bin];
 }
 
-/// A library song with parsed media metadata.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A collection song with parsed media metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Song {
     pub path: String,
     pub duration_ms: u64,
@@ -62,26 +62,19 @@ pub struct Song {
 }
 
 /// Distinguishes scanned folders from user-managed virtual playlists.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaylistKind {
     Directory { path: String },
     Virtual,
 }
 
 /// A persisted playlist and its current songs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Playlist {
     pub id: PlaylistId,
     pub name: String,
     pub kind: PlaylistKind,
     pub songs: Vec<Song>,
-}
-
-/// Legacy JSON manifest used only for one-shot migration into Turso.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub(crate) struct LibraryManifest {
-    pub(crate) next_id: PlaylistId,
-    pub(crate) playlists: Vec<Playlist>,
 }
 
 /// How playback mode is stored in `catalog.db` meta.

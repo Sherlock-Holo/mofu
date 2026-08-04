@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mofu/app/theme.dart';
-import 'package:mofu/library/library_controller.dart';
-import 'package:mofu/src/rust/api/library.dart';
+import 'package:mofu/collection/collection_controller.dart';
+import 'package:mofu/src/rust/api/collection.dart';
 import 'package:provider/provider.dart';
 
 /// 左侧播放列表侧栏：目录列表与虚拟列表。
@@ -10,7 +10,7 @@ class PlaylistSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final library = context.watch<LibraryController>();
+    final collection = context.watch<CollectionController>();
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -34,23 +34,23 @@ class PlaylistSidebar extends StatelessWidget {
                     children: [
                       IconButton(
                         tooltip: '打开音乐目录',
-                        onPressed: library.loading
+                        onPressed: collection.loading
                             ? null
-                            : library.pickAndAddDirectory,
+                            : collection.pickAndAddDirectory,
                         icon:
                             const Icon(Icons.folder_open_rounded, size: 20),
                       ),
                       IconButton(
                         tooltip: '添加音乐文件',
-                        onPressed: library.loading
+                        onPressed: collection.loading
                             ? null
-                            : library.pickAndAddFiles,
+                            : collection.pickAndAddFiles,
                         icon:
                             const Icon(Icons.library_add_rounded, size: 20),
                       ),
                       IconButton(
                         tooltip: '新建虚拟列表',
-                        onPressed: library.loading
+                        onPressed: collection.loading
                             ? null
                             : () => _promptCreateVirtual(context),
                         icon:
@@ -58,15 +58,15 @@ class PlaylistSidebar extends StatelessWidget {
                       ),
                       IconButton(
                         tooltip: '刷新当前列表',
-                        onPressed: library.loading
+                        onPressed: collection.loading
                             ? null
-                            : library.refreshSelected,
+                            : collection.refreshSelected,
                         icon: const Icon(Icons.refresh_rounded, size: 20),
                       ),
                     ],
                   ),
                 ),
-                if (library.loading)
+                if (collection.loading)
                   const Padding(
                     padding: EdgeInsets.only(right: 8),
                     child: SizedBox(
@@ -84,17 +84,17 @@ class PlaylistSidebar extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
               children: [
                 const _SectionLabel(label: '目录'),
-                if (library.directoryPlaylists.isEmpty)
+                if (collection.directoryPlaylists.isEmpty)
                   const _EmptyHint(text: '尚未导入目录')
                 else
-                  for (final playlist in library.directoryPlaylists)
+                  for (final playlist in collection.directoryPlaylists)
                     _PlaylistTile(playlist: playlist),
                 const SizedBox(height: 12),
                 const _SectionLabel(label: '虚拟列表'),
-                if (library.virtualPlaylists.isEmpty)
+                if (collection.virtualPlaylists.isEmpty)
                   const _EmptyHint(text: '可创建虚拟列表整理歌曲')
                 else
-                  for (final playlist in library.virtualPlaylists)
+                  for (final playlist in collection.virtualPlaylists)
                     _PlaylistTile(playlist: playlist, virtual: true),
               ],
             ),
@@ -105,7 +105,7 @@ class PlaylistSidebar extends StatelessWidget {
   }
 
   Future<void> _promptCreateVirtual(BuildContext context) async {
-    final library = context.read<LibraryController>();
+    final collection = context.read<CollectionController>();
     final name = await _promptText(
       context,
       title: '新建虚拟列表',
@@ -115,7 +115,7 @@ class PlaylistSidebar extends StatelessWidget {
     if (name == null) {
       return;
     }
-    await library.createVirtual(name);
+    await collection.createVirtual(name);
   }
 }
 
@@ -169,8 +169,8 @@ class _PlaylistTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final library = context.watch<LibraryController>();
-    final selected = library.selectedId == playlist.id;
+    final collection = context.watch<CollectionController>();
+    final selected = collection.selectedId == playlist.id;
 
     return Material(
       key: ValueKey(playlist.id),
@@ -192,10 +192,10 @@ class _PlaylistTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text('${playlist.songs.length} 首'),
-        onTap: () => library.selectPlaylist(playlist.id),
+        onTap: () => collection.selectPlaylist(playlist.id),
         onLongPress: virtual
             ? () => _showVirtualActions(context, playlist)
-            : () => library.refresh(playlist.id),
+            : () => collection.refresh(playlist.id),
         trailing: virtual
             ? IconButton(
                 tooltip: '更多',
@@ -211,7 +211,7 @@ class _PlaylistTile extends StatelessWidget {
     BuildContext context,
     Playlist playlist,
   ) async {
-    final library = context.read<LibraryController>();
+    final collection = context.read<CollectionController>();
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: StrawberryCream.cream,
@@ -251,7 +251,7 @@ class _PlaylistTile extends StatelessWidget {
         confirmLabel: '保存',
       );
       if (name != null && context.mounted) {
-        await library.renameVirtual(playlist.id, name);
+        await collection.renameVirtual(playlist.id, name);
       }
     } else if (action == 'import') {
       await _importFromOtherPlaylist(context, playlist);
@@ -274,7 +274,7 @@ class _PlaylistTile extends StatelessWidget {
         ),
       );
       if (confirmed == true) {
-        await library.deleteVirtual(playlist.id);
+        await collection.deleteVirtual(playlist.id);
       }
     }
   }
@@ -283,8 +283,8 @@ class _PlaylistTile extends StatelessWidget {
     BuildContext context,
     Playlist target,
   ) async {
-    final library = context.read<LibraryController>();
-    final sources = library.playlists
+    final collection = context.read<CollectionController>();
+    final sources = collection.playlists
         .where((playlist) => playlist.id != target.id)
         .toList();
     if (sources.isEmpty) {
@@ -310,7 +310,7 @@ class _PlaylistTile extends StatelessWidget {
     if (sourceId == null || !context.mounted) {
       return;
     }
-    await library.importFromPlaylist(
+    await collection.importFromPlaylist(
       targetId: target.id,
       sourceId: sourceId,
     );

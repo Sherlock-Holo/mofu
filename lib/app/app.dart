@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mofu/app/router.dart';
 import 'package:mofu/app/theme.dart';
-import 'package:mofu/library/library_controller.dart';
+import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
-import 'package:mofu/src/rust/api/library.dart';
+import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/src/rust/api/player.dart' show PlaybackMode;
 import 'package:mofu/src/rust/api/setup.dart';
 import 'package:mofu/src/rust/frb_generated.dart';
@@ -15,11 +15,11 @@ import 'package:provider/provider.dart';
 class MofuApp extends StatefulWidget {
   const MofuApp({
     super.key,
-    this.libraryController,
+    this.collectionController,
     this.playerController,
   });
 
-  final LibraryController? libraryController;
+  final CollectionController? collectionController;
   final PlayerController? playerController;
 
   @override
@@ -27,30 +27,30 @@ class MofuApp extends StatefulWidget {
 }
 
 class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
-  late final LibraryController _library =
-      widget.libraryController ?? LibraryController();
+  late final CollectionController _collection =
+      widget.collectionController ?? CollectionController();
   late final PlayerController _player =
       widget.playerController ?? PlayerController();
   late final _router = createRouter();
-  var _ownsLibrary = false;
+  var _ownsCollection = false;
   var _ownsPlayer = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _ownsLibrary = widget.libraryController == null;
+    _ownsCollection = widget.collectionController == null;
     _ownsPlayer = widget.playerController == null;
-    _player.persistPlaybackMode = _library.persistPlaybackMode;
-    _player.persistVolume = _library.persistVolume;
-    _player.persistPlaybackSession = _library.persistPlaybackSession;
-    _player.clearPlaybackSession = _library.clearPlaybackSession;
+    _player.persistPlaybackMode = _collection.persistPlaybackMode;
+    _player.persistVolume = _collection.persistVolume;
+    _player.persistPlaybackSession = _collection.persistPlaybackSession;
+    _player.clearPlaybackSession = _collection.clearPlaybackSession;
     unawaited(_bootstrap());
   }
 
   Future<void> _bootstrap() async {
     // 生产路径自建 controller，需要先加载 FRB；测试注入 fake 时跳过。
-    if (_ownsLibrary || _ownsPlayer) {
+    if (_ownsCollection || _ownsPlayer) {
       await RustLib.init();
       setup();
     }
@@ -59,7 +59,7 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     }
 
     final playerReady = _player.ensureReady();
-    await _library.load();
+    await _collection.load();
     if (!mounted) {
       return;
     }
@@ -72,7 +72,7 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     // 先顺序读完 meta（音量/模式/会话），再异步补封面。
     // 连接池已支持并发库操作；此处顺序加载仍作防御性编排，避免启动路径竞态。
     try {
-      final volume = await _library.loadVolume();
+      final volume = await _collection.loadVolume();
       if (!mounted) {
         return;
       }
@@ -83,7 +83,7 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     }
 
     try {
-      final mode = await _library.loadPlaybackMode();
+      final mode = await _collection.loadPlaybackMode();
       if (!mounted) {
         return;
       }
@@ -94,9 +94,9 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     }
 
     try {
-      final session = await _library.loadPlaybackSession();
+      final session = await _collection.loadPlaybackSession();
       if (!mounted || session == null) {
-        unawaited(_library.hydrateCovers());
+        unawaited(_collection.hydrateCovers());
         return;
       }
       await _restoreSession(session);
@@ -105,26 +105,26 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
       debugPrint('bootstrap: loadPlaybackSession failed: $err\n$stack');
     }
 
-    unawaited(_library.hydrateCovers());
+    unawaited(_collection.hydrateCovers());
   }
 
   Future<void> _restoreSession(PlaybackSession session) async {
     Playlist? playlist;
-    for (final candidate in _library.playlists) {
+    for (final candidate in _collection.playlists) {
       if (candidate.id == session.playlistId) {
         playlist = candidate;
         break;
       }
     }
     if (playlist == null) {
-      await _library.clearPlaybackSession();
+      await _collection.clearPlaybackSession();
       return;
     }
 
     final paths = playlist.songs.map((song) => song.path).toList();
     final index = paths.indexOf(session.path);
     if (index < 0) {
-      await _library.clearPlaybackSession();
+      await _collection.clearPlaybackSession();
       return;
     }
 
@@ -150,7 +150,7 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
       if (wasShuffle) {
         _player.setPlaybackMode(PlaybackMode.shuffle, persist: false);
       }
-      _library.selectPlaylist(playlist.id);
+      _collection.selectPlaylist(playlist.id);
     } finally {
       _player.persistPlaybackSession = persistSession;
       _player.clearPlaybackSession = clearSession;
@@ -177,8 +177,8 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     if (_ownsPlayer) {
       _player.dispose();
     }
-    if (_ownsLibrary) {
-      _library.dispose();
+    if (_ownsCollection) {
+      _collection.dispose();
     }
     super.dispose();
   }
@@ -187,7 +187,7 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<LibraryController>.value(value: _library),
+        ChangeNotifierProvider<CollectionController>.value(value: _collection),
         ChangeNotifierProvider<PlayerController>.value(value: _player),
       ],
       child: MaterialApp.router(

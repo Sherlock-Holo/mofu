@@ -3,16 +3,15 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-
 import '../frb_generated.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'player.dart';
 
 // These functions are ignored because they are not marked as `pub`: `ffi_playback_mode`, `map_err`, `stored_playback_mode`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Library>>
-abstract class Library implements RustOpaqueInterface {
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Collection>>
+abstract class Collection implements RustOpaqueInterface {
   /// Recursively scan and persist a music directory.
   Future<Playlist> addDirectory({required String path});
 
@@ -36,22 +35,24 @@ abstract class Library implements RustOpaqueInterface {
   /// Import selected paths from one playlist into a virtual playlist.
   ///
   /// An empty path list imports every song in the source playlist.
-  Future<BigInt> importFromPlaylist(
-      {required BigInt targetId,
-      required BigInt sourceId,
-      required List<String> paths});
+  Future<BigInt> importFromPlaylist({
+    required BigInt targetId,
+    required BigInt sourceId,
+    required List<String> paths,
+  });
 
   // HINT: Make it `#[frb(sync)]` to let it become the default constructor of Dart class.
-  /// Open the library in the platform application data directory.
-  static Future<Library> newInstance() =>
-      RustLib.instance.api.crateApiLibraryLibraryNew();
+  /// Open the collection in the platform application data directory.
+  static Future<Collection> newInstance() =>
+      RustLib.instance.api.crateApiCollectionCollectionNew();
 
-  /// Open the library under an explicit data directory.
+  /// Open the collection under an explicit data directory.
   ///
   /// Cover art still uses the platform XDG cache directory.
-  static Future<Library> newAt({required String dataDirectory}) =>
-      RustLib.instance.api
-          .crateApiLibraryLibraryNewAt(dataDirectory: dataDirectory);
+  static Future<Collection> newAt({required String dataDirectory}) => RustLib
+      .instance
+      .api
+      .crateApiCollectionCollectionNewAt(dataDirectory: dataDirectory);
 
   /// Load the persisted playback mode (defaults to sequential).
   Future<PlaybackMode> playbackMode();
@@ -146,13 +147,9 @@ class Playlist {
 }
 
 /// Playlist category for Flutter FFI.
-enum PlaylistKind {
-  directory,
-  virtual,
-  ;
-}
+enum PlaylistKind { directory, virtual }
 
-/// One parsed library song.
+/// One parsed collection song.
 class Song {
   final String path;
   final BigInt durationMs;
@@ -177,15 +174,12 @@ class Song {
           metadata == other.metadata;
 }
 
-/// Cover art for a single library path (async hydrate after lite playlists).
+/// Cover art for a single collection path (async hydrate after lite playlists).
 class SongCover {
   final String path;
   final CoverArt cover;
 
-  const SongCover({
-    required this.path,
-    required this.cover,
-  });
+  const SongCover({required this.path, required this.cover});
 
   @override
   int get hashCode => path.hashCode ^ cover.hashCode;

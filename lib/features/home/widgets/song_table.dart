@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mofu/app/theme.dart';
-import 'package:mofu/library/library_controller.dart';
+import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
-import 'package:mofu/src/rust/api/library.dart';
+import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:mofu/widgets/duration_format.dart';
 import 'package:provider/provider.dart';
@@ -31,13 +31,13 @@ class _SongTableState extends State<SongTable> {
 
   @override
   Widget build(BuildContext context) {
-    final library = context.watch<LibraryController>();
+    final collection = context.watch<CollectionController>();
     // 只订阅高亮相关字段；进度 tick 不应整表重建。
     final playingPath = context.select<PlayerController, String?>(
       (player) => player.currentPath,
     );
     final player = context.read<PlayerController>();
-    final playlist = library.selectedPlaylist;
+    final playlist = collection.selectedPlaylist;
     final songs = playlist?.songs ?? const <Song>[];
 
     if (playlist == null) {
@@ -69,14 +69,14 @@ class _SongTableState extends State<SongTable> {
             const SizedBox(height: 16),
             if (playlist.kind == PlaylistKind.virtual)
               FilledButton.icon(
-                onPressed: library.loading ? null : library.pickAndAddFiles,
+                onPressed: collection.loading ? null : collection.pickAndAddFiles,
                 icon: const Icon(Icons.library_add_rounded),
                 label: const Text('添加音乐文件'),
               )
             else
               FilledButton.icon(
                 onPressed:
-                    library.loading ? null : () => library.refresh(playlist.id),
+                    collection.loading ? null : () => collection.refresh(playlist.id),
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('刷新目录'),
               ),

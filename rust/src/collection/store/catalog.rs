@@ -4,7 +4,7 @@ use std::path::Path;
 
 use turso::{Connection, Value, params};
 
-use super::super::error::LibraryError;
+use super::super::error::CollectionError;
 use super::super::model::{
     CoverExt, PlaybackSession, PlaylistId, PlaylistKind, PlaylistRow, SongId, SongRow, SongTags,
     StoredPlaybackMode, StoredPlaylistKind,
@@ -65,14 +65,14 @@ pub(crate) struct CatalogStore {
 }
 
 impl CatalogStore {
-    pub(crate) async fn open(path: &Path) -> Result<Self, LibraryError> {
+    pub(crate) async fn open(path: &Path) -> Result<Self, CollectionError> {
         let db = ReconnectableDb::open(path).await?;
         let store = Self { db };
         store.migrate().await?;
         Ok(store)
     }
 
-    pub(crate) async fn migrate(&self) -> Result<(), LibraryError> {
+    pub(crate) async fn migrate(&self) -> Result<(), CollectionError> {
         self.db
             .run(async move |conn| {
                 conn.execute_batch(SCHEMA_SQL).await?;
@@ -86,20 +86,7 @@ impl CatalogStore {
             .await
     }
 
-    pub(crate) async fn playlist_count(&self) -> Result<usize, LibraryError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn.query("SELECT COUNT(*) FROM playlists", ()).await?;
-                let row = rows
-                    .next()
-                    .await?
-                    .ok_or_else(|| LibraryError::Database(turso::Error::QueryReturnedNoRows))?;
-                Ok(row.get::<i64>(0)? as usize)
-            })
-            .await
-    }
-
-    pub(crate) async fn next_playlist_id(&self) -> Result<PlaylistId, LibraryError> {
+    pub(crate) async fn next_playlist_id(&self) -> Result<PlaylistId, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -108,20 +95,20 @@ impl CatalogStore {
                 let row = rows
                     .next()
                     .await?
-                    .ok_or_else(|| LibraryError::Database(turso::Error::QueryReturnedNoRows))?;
+                    .ok_or_else(|| CollectionError::Database(turso::Error::QueryReturnedNoRows))?;
                 let max_id = row.get::<i64>(0)? as PlaylistId;
                 Ok(max_id.saturating_add(1).max(1))
             })
             .await
     }
 
-    pub(crate) async fn list_playlist_rows(&self) -> Result<Vec<PlaylistRow>, LibraryError> {
+    pub(crate) async fn list_playlist_rows(&self) -> Result<Vec<PlaylistRow>, CollectionError> {
         self.db
             .run(async move |conn| Self::list_playlist_rows_on(conn).await)
             .await
     }
 
-    async fn list_playlist_rows_on(conn: &Connection) -> Result<Vec<PlaylistRow>, LibraryError> {
+    async fn list_playlist_rows_on(conn: &Connection) -> Result<Vec<PlaylistRow>, CollectionError> {
         let mut rows = conn
             .query(
                 "SELECT id, name, kind, directory_path FROM playlists ORDER BY id",
@@ -137,7 +124,7 @@ impl CatalogStore {
                 Value::Null => None,
                 Value::Text(text) => Some(text),
                 other => {
-                    return Err(LibraryError::Database(turso::Error::ConversionFailure(
+                    return Err(CollectionError::Database(turso::Error::ConversionFailure(
                         format!("unexpected directory_path value: {other:?}"),
                     )));
                 }
@@ -146,14 +133,14 @@ impl CatalogStore {
                 Some(StoredPlaylistKind::Directory) => match directory_path {
                     Some(path) => PlaylistKind::Directory { path },
                     None => {
-                        return Err(LibraryError::Database(turso::Error::ConversionFailure(
+                        return Err(CollectionError::Database(turso::Error::ConversionFailure(
                             "directory playlist missing directory_path".to_owned(),
                         )));
                     }
                 },
                 Some(StoredPlaylistKind::Virtual) => PlaylistKind::Virtual,
                 None => {
-                    return Err(LibraryError::Database(turso::Error::ConversionFailure(
+                    return Err(CollectionError::Database(turso::Error::ConversionFailure(
                         format!("unknown playlist kind: {kind_raw}"),
                     )));
                 }
@@ -163,7 +150,10 @@ impl CatalogStore {
         Ok(playlists)
     }
 
-    pub(crate) async fn playlist_row(&self, id: PlaylistId) -> Result<PlaylistRow, LibraryError> {
+    pub(crate) async fn playlist_row(
+        &self,
+        id: PlaylistId,
+    ) -> Result<PlaylistRow, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -172,14 +162,17 @@ impl CatalogStore {
                         params![id as i64],
                     )
                     .await?;
-                let row = rows.next().await?.ok_or(LibraryError::PlaylistNotFound)?;
+                let row = rows
+                    .next()
+                    .await?
+                    .ok_or(CollectionError::PlaylistNotFound)?;
                 let name = row.get::<String>(1)?;
                 let kind_raw = row.get::<String>(2)?;
                 let directory_path = match row.get_value(3)? {
                     Value::Null => None,
                     Value::Text(text) => Some(text),
                     other => {
-                        return Err(LibraryError::Database(turso::Error::ConversionFailure(
+                        return Err(CollectionError::Database(turso::Error::ConversionFailure(
                             format!("unexpected directory_path value: {other:?}"),
                         )));
                     }
@@ -188,14 +181,16 @@ impl CatalogStore {
                     Some(StoredPlaylistKind::Directory) => match directory_path {
                         Some(path) => PlaylistKind::Directory { path },
                         None => {
-                            return Err(LibraryError::Database(turso::Error::ConversionFailure(
-                                "directory playlist missing directory_path".to_owned(),
-                            )));
+                            return Err(CollectionError::Database(
+                                turso::Error::ConversionFailure(
+                                    "directory playlist missing directory_path".to_owned(),
+                                ),
+                            ));
                         }
                     },
                     Some(StoredPlaylistKind::Virtual) => PlaylistKind::Virtual,
                     None => {
-                        return Err(LibraryError::Database(turso::Error::ConversionFailure(
+                        return Err(CollectionError::Database(turso::Error::ConversionFailure(
                             format!("unknown playlist kind: {kind_raw}"),
                         )));
                     }
@@ -208,7 +203,7 @@ impl CatalogStore {
     pub(crate) async fn songs_for_playlist(
         &self,
         playlist_id: PlaylistId,
-    ) -> Result<Vec<SongRow>, LibraryError> {
+    ) -> Result<Vec<SongRow>, CollectionError> {
         self.db
             .run(async move |conn| Self::songs_for_playlist_on(conn, playlist_id).await)
             .await
@@ -218,7 +213,7 @@ impl CatalogStore {
     pub(crate) async fn song_rows_for_paths(
         &self,
         paths: &[String],
-    ) -> Result<Vec<SongRow>, LibraryError> {
+    ) -> Result<Vec<SongRow>, CollectionError> {
         if paths.is_empty() {
             return Ok(Vec::new());
         }
@@ -231,7 +226,7 @@ impl CatalogStore {
     async fn song_rows_for_paths_on(
         conn: &Connection,
         paths: &[String],
-    ) -> Result<Vec<SongRow>, LibraryError> {
+    ) -> Result<Vec<SongRow>, CollectionError> {
         // SQLite 变量数有上限；按批查询避免超限。
         const BATCH: usize = 200;
         let mut songs = Vec::new();
@@ -263,7 +258,7 @@ impl CatalogStore {
     async fn songs_for_playlist_on(
         conn: &Connection,
         playlist_id: PlaylistId,
-    ) -> Result<Vec<SongRow>, LibraryError> {
+    ) -> Result<Vec<SongRow>, CollectionError> {
         let mut rows = conn
             .query(
                 r#"
@@ -287,7 +282,7 @@ impl CatalogStore {
         Ok(songs)
     }
 
-    fn song_row_from_query(row: turso::Row) -> Result<SongRow, LibraryError> {
+    fn song_row_from_query(row: turso::Row) -> Result<SongRow, CollectionError> {
         Ok(SongRow {
             id: row.get::<i64>(0)?,
             path: row.get::<String>(1)?,
@@ -314,43 +309,43 @@ impl CatalogStore {
         })
     }
 
-    fn opt_cover_ext(row: &turso::Row, idx: usize) -> Result<Option<CoverExt>, LibraryError> {
+    fn opt_cover_ext(row: &turso::Row, idx: usize) -> Result<Option<CoverExt>, CollectionError> {
         match Self::opt_text(row, idx)? {
             None => Ok(None),
             Some(text) => match CoverExt::parse(&text) {
                 Some(ext) => Ok(Some(ext)),
-                None => Err(LibraryError::Database(turso::Error::ConversionFailure(
+                None => Err(CollectionError::Database(turso::Error::ConversionFailure(
                     format!("unknown cover_ext: {text}"),
                 ))),
             },
         }
     }
 
-    fn opt_text(row: &turso::Row, idx: usize) -> Result<Option<String>, LibraryError> {
+    fn opt_text(row: &turso::Row, idx: usize) -> Result<Option<String>, CollectionError> {
         match row.get_value(idx)? {
             Value::Null => Ok(None),
             Value::Text(text) => Ok(Some(text)),
-            other => Err(LibraryError::Database(turso::Error::ConversionFailure(
+            other => Err(CollectionError::Database(turso::Error::ConversionFailure(
                 format!("expected text/null at {idx}, got {other:?}"),
             ))),
         }
     }
 
-    fn opt_u16(row: &turso::Row, idx: usize) -> Result<Option<u16>, LibraryError> {
+    fn opt_u16(row: &turso::Row, idx: usize) -> Result<Option<u16>, CollectionError> {
         match row.get_value(idx)? {
             Value::Null => Ok(None),
             Value::Integer(value) => Ok(Some(value as u16)),
-            other => Err(LibraryError::Database(turso::Error::ConversionFailure(
+            other => Err(CollectionError::Database(turso::Error::ConversionFailure(
                 format!("expected int/null at {idx}, got {other:?}"),
             ))),
         }
     }
 
-    fn opt_u64(row: &turso::Row, idx: usize) -> Result<Option<u64>, LibraryError> {
+    fn opt_u64(row: &turso::Row, idx: usize) -> Result<Option<u64>, CollectionError> {
         match row.get_value(idx)? {
             Value::Null => Ok(None),
             Value::Integer(value) => Ok(Some(value as u64)),
-            other => Err(LibraryError::Database(turso::Error::ConversionFailure(
+            other => Err(CollectionError::Database(turso::Error::ConversionFailure(
                 format!("expected int/null at {idx}, got {other:?}"),
             ))),
         }
@@ -361,7 +356,7 @@ impl CatalogStore {
         id: PlaylistId,
         name: &str,
         kind: &PlaylistKind,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         let (stored_kind, directory_path) = match kind {
             PlaylistKind::Directory { path } => {
                 (StoredPlaylistKind::Directory, Some(path.as_str()))
@@ -390,7 +385,7 @@ impl CatalogStore {
     pub(crate) async fn find_directory_playlist_id(
         &self,
         directory_path: &str,
-    ) -> Result<Option<PlaylistId>, LibraryError> {
+    ) -> Result<Option<PlaylistId>, CollectionError> {
         let directory_path = directory_path.to_owned();
         self.db
             .run(async move |conn| {
@@ -415,7 +410,7 @@ impl CatalogStore {
         &self,
         id: PlaylistId,
         name: &str,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         let name = name.to_owned();
         self.db
             .run(async move |conn| {
@@ -426,14 +421,14 @@ impl CatalogStore {
                     )
                     .await?;
                 if changed == 0 {
-                    return Err(LibraryError::PlaylistNotFound);
+                    return Err(CollectionError::PlaylistNotFound);
                 }
                 Ok(())
             })
             .await
     }
 
-    pub(crate) async fn delete_playlist(&self, id: PlaylistId) -> Result<(), LibraryError> {
+    pub(crate) async fn delete_playlist(&self, id: PlaylistId) -> Result<(), CollectionError> {
         self.db
             .run(async move |conn| {
                 let tx = conn.transaction().await?;
@@ -446,7 +441,7 @@ impl CatalogStore {
                     .execute("DELETE FROM playlists WHERE id = ?1", params![id as i64])
                     .await?;
                 if changed == 0 {
-                    return Err(LibraryError::PlaylistNotFound);
+                    return Err(CollectionError::PlaylistNotFound);
                 }
                 tx.commit().await?;
                 Ok(())
@@ -460,7 +455,7 @@ impl CatalogStore {
         path: &str,
         duration_ms: u64,
         tags: &SongTags,
-    ) -> Result<SongId, LibraryError> {
+    ) -> Result<SongId, CollectionError> {
         let path = path.to_owned();
         let tags = tags.clone();
         self.db
@@ -473,7 +468,7 @@ impl CatalogStore {
         path: &str,
         duration_ms: u64,
         tags: &SongTags,
-    ) -> Result<SongId, LibraryError> {
+    ) -> Result<SongId, CollectionError> {
         conn.execute(
             r#"
             INSERT INTO songs (
@@ -533,7 +528,7 @@ impl CatalogStore {
         let row = rows
             .next()
             .await?
-            .ok_or_else(|| LibraryError::Database(turso::Error::QueryReturnedNoRows))?;
+            .ok_or_else(|| CollectionError::Database(turso::Error::QueryReturnedNoRows))?;
         Ok(row.get::<i64>(0)?)
     }
 
@@ -542,7 +537,7 @@ impl CatalogStore {
         playlist_id: PlaylistId,
         song_id: SongId,
         position: i64,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         self.db
             .run(async move |conn| {
                 conn.execute(
@@ -562,7 +557,7 @@ impl CatalogStore {
         &self,
         playlist_id: PlaylistId,
         song_ids: &[SongId],
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         let song_ids = song_ids.to_vec();
         self.db
             .run(async move |conn| {
@@ -589,7 +584,7 @@ impl CatalogStore {
     pub(crate) async fn playlist_song_paths(
         &self,
         playlist_id: PlaylistId,
-    ) -> Result<Vec<String>, LibraryError> {
+    ) -> Result<Vec<String>, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -616,7 +611,7 @@ impl CatalogStore {
     /// Delete songs not referenced by any playlist; returns removed song ids and cover_ext.
     pub(crate) async fn garbage_collect_orphan_songs(
         &self,
-    ) -> Result<Vec<(SongId, Option<CoverExt>)>, LibraryError> {
+    ) -> Result<Vec<(SongId, Option<CoverExt>)>, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -646,7 +641,10 @@ impl CatalogStore {
             .await
     }
 
-    pub(crate) async fn max_position(&self, playlist_id: PlaylistId) -> Result<i64, LibraryError> {
+    pub(crate) async fn max_position(
+        &self,
+        playlist_id: PlaylistId,
+    ) -> Result<i64, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -658,14 +656,14 @@ impl CatalogStore {
                 let row = rows
                     .next()
                     .await?
-                    .ok_or_else(|| LibraryError::Database(turso::Error::QueryReturnedNoRows))?;
+                    .ok_or_else(|| CollectionError::Database(turso::Error::QueryReturnedNoRows))?;
                 Ok(row.get::<i64>(0)?)
             })
             .await
     }
 
     /// Load persisted playback mode; missing key defaults to sequential.
-    pub(crate) async fn playback_mode(&self) -> Result<StoredPlaybackMode, LibraryError> {
+    pub(crate) async fn playback_mode(&self) -> Result<StoredPlaybackMode, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -679,7 +677,7 @@ impl CatalogStore {
                 };
                 let value = row.get::<String>(0)?;
                 StoredPlaybackMode::parse(&value).ok_or_else(|| {
-                    LibraryError::Database(turso::Error::ConversionFailure(format!(
+                    CollectionError::Database(turso::Error::ConversionFailure(format!(
                         "unknown playback_mode: {value}"
                     )))
                 })
@@ -690,7 +688,7 @@ impl CatalogStore {
     pub(crate) async fn set_playback_mode(
         &self,
         mode: StoredPlaybackMode,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         self.db
             .run(async move |conn| {
                 conn.execute(
@@ -704,7 +702,7 @@ impl CatalogStore {
     }
 
     /// Load persisted volume; missing key defaults to `1.0`.
-    pub(crate) async fn volume(&self) -> Result<f64, LibraryError> {
+    pub(crate) async fn volume(&self) -> Result<f64, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -715,7 +713,7 @@ impl CatalogStore {
                 };
                 let value = row.get::<String>(0)?;
                 value.parse::<f64>().map_err(|err| {
-                    LibraryError::Database(turso::Error::ConversionFailure(format!(
+                    CollectionError::Database(turso::Error::ConversionFailure(format!(
                         "invalid volume `{value}`: {err}"
                     )))
                 })
@@ -724,7 +722,7 @@ impl CatalogStore {
     }
 
     /// Persist volume clamped to `[0, 1]`.
-    pub(crate) async fn set_volume(&self, volume: f64) -> Result<(), LibraryError> {
+    pub(crate) async fn set_volume(&self, volume: f64) -> Result<(), CollectionError> {
         let volume = volume.clamp(0.0, 1.0);
         let value = volume.to_string();
         self.db
@@ -742,7 +740,9 @@ impl CatalogStore {
     /// Load persisted playback session; missing key is `None`.
     ///
     /// Corrupt JSON is cleared and treated as no session (not silently defaulted).
-    pub(crate) async fn playback_session(&self) -> Result<Option<PlaybackSession>, LibraryError> {
+    pub(crate) async fn playback_session(
+        &self,
+    ) -> Result<Option<PlaybackSession>, CollectionError> {
         self.db
             .run(async move |conn| {
                 let mut rows = conn
@@ -773,7 +773,7 @@ impl CatalogStore {
     pub(crate) async fn set_playback_session(
         &self,
         session: &PlaybackSession,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<(), CollectionError> {
         let value = session.to_json()?;
         self.db
             .run(async move |conn| {
@@ -787,7 +787,7 @@ impl CatalogStore {
             .await
     }
 
-    pub(crate) async fn clear_playback_session(&self) -> Result<(), LibraryError> {
+    pub(crate) async fn clear_playback_session(&self) -> Result<(), CollectionError> {
         self.db
             .run(async move |conn| {
                 conn.execute(
@@ -801,7 +801,11 @@ impl CatalogStore {
     }
 
     #[cfg(test)]
-    pub(crate) async fn upsert_meta_raw(&self, key: &str, value: &str) -> Result<(), LibraryError> {
+    pub(crate) async fn upsert_meta_raw(
+        &self,
+        key: &str,
+        value: &str,
+    ) -> Result<(), CollectionError> {
         let key = key.to_owned();
         let value = value.to_owned();
         self.db

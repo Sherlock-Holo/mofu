@@ -35,7 +35,7 @@
 flowchart LR
   subgraph Flutter
     UI[Widgets / Pages]
-    LC[LibraryController]
+    LC[CollectionController]
     PC[PlayerController]
     UI --> LC
     UI --> PC
@@ -44,14 +44,14 @@ flowchart LR
   subgraph Rust
     API[api/ FFI 层]
   subgraph Domain
-      LIB[library]
+      COL[collection]
       PLAY[player]
     end
-    API --> LIB
+    API --> COL
     API --> PLAY
     PLAY --> DEC[Symphonia 解码]
     PLAY --> OUT[CPAL 输出]
-    LIB --> INS[元数据探测]
+    COL --> INS[元数据探测]
   end
 
   LC <-->|FRB| API
@@ -65,14 +65,14 @@ mofu/
 ├── lib/                    # Flutter 应用
 │   ├── app/                # 主题、路由、根 Widget
 │   ├── features/           # 首页、正在播放页
-│   ├── library/            # 曲库控制器
+│   ├── collection/         # 曲库控制器
 │   ├── player/             # 播放控制器
 │   ├── widgets/            # 共用组件（底栏、封面等）
 │   └── src/rust/           # FRB 生成的 Dart 绑定
 ├── rust/                   # Rust 核心库
 │   └── src/
-│       ├── api/            # FFI 入口（library、player）
-│       ├── library/        # 曲库领域逻辑
+│       ├── api/            # FFI 入口（collection、player）
+│       ├── collection/     # 曲库领域逻辑
 │       └── player/         # 播放器领域逻辑
 ├── rust_builder/           # Flutter 插件，CargoKit 构建 Rust
 ├── test/                   # Widget 测试
@@ -144,8 +144,7 @@ flutter_rust_bridge_codegen generate
 | 封面缓存 `covers/` | `~/.cache/mofu/covers/`（应用 cache 目录） |
 
 - 应用 ID：`dev.mofu.mofu`
-- 可通过 `Library::new_at` 指定自定义 **数据** 目录；封面仍使用平台 cache
-- 若目录中仍有旧版 `library.json` 且 catalog 为空，启动时会一次性迁移并重命名为 `library.json.migrated`
+- 可通过 `Collection::new_at` 指定自定义 **数据** 目录；封面仍使用平台 cache
 
 ## 平台支持
 

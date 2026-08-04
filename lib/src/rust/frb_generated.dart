@@ -3,18 +3,16 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
-import 'dart:async';
-import 'dart:convert';
-
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-
+import 'api/collection.dart';
 import 'api/file_dialog.dart';
-import 'api/library.dart';
 import 'api/player.dart';
 import 'api/setup.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -40,12 +38,8 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
   /// Initialize flutter_rust_bridge in mock mode.
   /// No libraries for FFI are loaded.
-  static void initMock({
-    required RustLibApi api,
-  }) {
-    instance.initMockImpl(
-      api: api,
-    );
+  static void initMock({required RustLibApi api}) {
+    instance.initMockImpl(api: api);
   }
 
   /// Dispose flutter_rust_bridge
@@ -73,71 +67,100 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1200953684;
+  int get rustContentHash => -1000516189;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
-    stem: 'rust_lib_mofu',
-    ioDirectory: 'rust/target/release/',
-    webPrefix: 'pkg/',
-    wasmBindgenName: 'wasm_bindgen',
-  );
+        stem: 'rust_lib_mofu',
+        ioDirectory: 'rust/target/release/',
+        webPrefix: 'pkg/',
+        wasmBindgenName: 'wasm_bindgen',
+      );
 }
 
 abstract class RustLibApi extends BaseApi {
-  Future<Playlist> crateApiLibraryLibraryAddDirectory(
-      {required Library that, required String path});
+  Future<Playlist> crateApiCollectionCollectionAddDirectory({
+    required Collection that,
+    required String path,
+  });
 
-  Future<BigInt> crateApiLibraryLibraryAddFiles(
-      {required Library that, required BigInt id, required List<String> paths});
+  Future<BigInt> crateApiCollectionCollectionAddFiles({
+    required Collection that,
+    required BigInt id,
+    required List<String> paths,
+  });
 
-  Future<void> crateApiLibraryLibraryClearPlaybackSession(
-      {required Library that});
+  Future<void> crateApiCollectionCollectionClearPlaybackSession({
+    required Collection that,
+  });
 
-  Future<List<SongCover>> crateApiLibraryLibraryCoversForPaths(
-      {required Library that, required List<String> paths});
+  Future<List<SongCover>> crateApiCollectionCollectionCoversForPaths({
+    required Collection that,
+    required List<String> paths,
+  });
 
-  Future<Playlist> crateApiLibraryLibraryCreateVirtual(
-      {required Library that, required String name});
+  Future<Playlist> crateApiCollectionCollectionCreateVirtual({
+    required Collection that,
+    required String name,
+  });
 
-  Future<void> crateApiLibraryLibraryDeleteVirtual(
-      {required Library that, required BigInt id});
+  Future<void> crateApiCollectionCollectionDeleteVirtual({
+    required Collection that,
+    required BigInt id,
+  });
 
-  Future<BigInt> crateApiLibraryLibraryImportFromPlaylist(
-      {required Library that,
-      required BigInt targetId,
-      required BigInt sourceId,
-      required List<String> paths});
+  Future<BigInt> crateApiCollectionCollectionImportFromPlaylist({
+    required Collection that,
+    required BigInt targetId,
+    required BigInt sourceId,
+    required List<String> paths,
+  });
 
-  Future<Library> crateApiLibraryLibraryNew();
+  Future<Collection> crateApiCollectionCollectionNew();
 
-  Future<Library> crateApiLibraryLibraryNewAt({required String dataDirectory});
+  Future<Collection> crateApiCollectionCollectionNewAt({
+    required String dataDirectory,
+  });
 
-  Future<PlaybackMode> crateApiLibraryLibraryPlaybackMode(
-      {required Library that});
+  Future<PlaybackMode> crateApiCollectionCollectionPlaybackMode({
+    required Collection that,
+  });
 
-  Future<PlaybackSession?> crateApiLibraryLibraryPlaybackSession(
-      {required Library that});
+  Future<PlaybackSession?> crateApiCollectionCollectionPlaybackSession({
+    required Collection that,
+  });
 
-  Future<List<Playlist>> crateApiLibraryLibraryPlaylists(
-      {required Library that});
+  Future<List<Playlist>> crateApiCollectionCollectionPlaylists({
+    required Collection that,
+  });
 
-  Future<Playlist> crateApiLibraryLibraryRefresh(
-      {required Library that, required BigInt id});
+  Future<Playlist> crateApiCollectionCollectionRefresh({
+    required Collection that,
+    required BigInt id,
+  });
 
-  Future<void> crateApiLibraryLibraryRenameVirtual(
-      {required Library that, required BigInt id, required String name});
+  Future<void> crateApiCollectionCollectionRenameVirtual({
+    required Collection that,
+    required BigInt id,
+    required String name,
+  });
 
-  Future<void> crateApiLibraryLibrarySetPlaybackMode(
-      {required Library that, required PlaybackMode mode});
+  Future<void> crateApiCollectionCollectionSetPlaybackMode({
+    required Collection that,
+    required PlaybackMode mode,
+  });
 
-  Future<void> crateApiLibraryLibrarySetPlaybackSession(
-      {required Library that, required PlaybackSession session});
+  Future<void> crateApiCollectionCollectionSetPlaybackSession({
+    required Collection that,
+    required PlaybackSession session,
+  });
 
-  Future<void> crateApiLibraryLibrarySetVolume(
-      {required Library that, required double volume});
+  Future<void> crateApiCollectionCollectionSetVolume({
+    required Collection that,
+    required double volume,
+  });
 
-  Future<double> crateApiLibraryLibraryVolume({required Library that});
+  Future<double> crateApiCollectionCollectionVolume({required Collection that});
 
   BigInt crateApiPlayerPlayerDurationMs({required Player that});
 
@@ -153,30 +176,41 @@ abstract class RustLibApi extends BaseApi {
 
   void crateApiPlayerPlayerPlay({required Player that});
 
-  void crateApiPlayerPlayerPlayIndex(
-      {required Player that, required BigInt index});
+  void crateApiPlayerPlayerPlayIndex({
+    required Player that,
+    required BigInt index,
+  });
 
   BigInt crateApiPlayerPlayerPositionMs({required Player that});
 
   void crateApiPlayerPlayerPrevious({required Player that});
 
-  void crateApiPlayerPlayerSeek(
-      {required Player that, required BigInt positionMs});
+  void crateApiPlayerPlayerSeek({
+    required Player that,
+    required BigInt positionMs,
+  });
 
-  void crateApiPlayerPlayerSeekRelative(
-      {required Player that, required PlatformInt64 deltaMs});
+  void crateApiPlayerPlayerSeekRelative({
+    required Player that,
+    required PlatformInt64 deltaMs,
+  });
 
-  void crateApiPlayerPlayerSetPlaybackMode(
-      {required Player that, required PlaybackMode mode});
+  void crateApiPlayerPlayerSetPlaybackMode({
+    required Player that,
+    required PlaybackMode mode,
+  });
 
-  void crateApiPlayerPlayerSetQueue(
-      {required Player that,
-      required List<String> paths,
-      BigInt? startIndex,
-      required bool autoplay});
+  void crateApiPlayerPlayerSetQueue({
+    required Player that,
+    required List<String> paths,
+    BigInt? startIndex,
+    required bool autoplay,
+  });
 
-  void crateApiPlayerPlayerSetVolume(
-      {required Player that, required double volume});
+  void crateApiPlayerPlayerSetVolume({
+    required Player that,
+    required double volume,
+  });
 
   PlayerSnapshot crateApiPlayerPlayerSnapshot({required Player that});
 
@@ -190,11 +224,13 @@ abstract class RustLibApi extends BaseApi {
 
   void crateApiSetupSetup();
 
-  RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_Library;
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_Collection;
 
-  RustArcDecrementStrongCountFnType get rust_arc_decrement_strong_count_Library;
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_Collection;
 
-  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LibraryPtr;
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_CollectionPtr;
 
   RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_Player;
 
@@ -212,695 +248,876 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<Playlist> crateApiLibraryLibraryAddDirectory(
-      {required Library that, required String path}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_String(path, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 1, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_playlist,
-        decodeErrorData: sse_decode_String,
+  Future<Playlist> crateApiCollectionCollectionAddDirectory({
+    required Collection that,
+    required String path,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_playlist,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionAddDirectoryConstMeta,
+        argValues: [that, path],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryAddDirectoryConstMeta,
-      argValues: [that, path],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryAddDirectoryConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionAddDirectoryConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_add_directory",
+        debugName: "Collection_add_directory",
         argNames: ["that", "path"],
       );
 
   @override
-  Future<BigInt> crateApiLibraryLibraryAddFiles(
-      {required Library that,
-      required BigInt id,
-      required List<String> paths}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_u_64(id, serializer);
-        sse_encode_list_String(paths, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 2, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_u_64,
-        decodeErrorData: sse_decode_String,
+  Future<BigInt> crateApiCollectionCollectionAddFiles({
+    required Collection that,
+    required BigInt id,
+    required List<String> paths,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_u_64(id, serializer);
+          sse_encode_list_String(paths, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_64,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionAddFilesConstMeta,
+        argValues: [that, id, paths],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryAddFilesConstMeta,
-      argValues: [that, id, paths],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryAddFilesConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionAddFilesConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_add_files",
+        debugName: "Collection_add_files",
         argNames: ["that", "id", "paths"],
       );
 
   @override
-  Future<void> crateApiLibraryLibraryClearPlaybackSession(
-      {required Library that}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 3, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  Future<void> crateApiCollectionCollectionClearPlaybackSession({
+    required Collection that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionClearPlaybackSessionConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryClearPlaybackSessionConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryClearPlaybackSessionConstMeta =>
+  TaskConstMeta
+  get kCrateApiCollectionCollectionClearPlaybackSessionConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_clear_playback_session",
+        debugName: "Collection_clear_playback_session",
         argNames: ["that"],
       );
 
   @override
-  Future<List<SongCover>> crateApiLibraryLibraryCoversForPaths(
-      {required Library that, required List<String> paths}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_list_String(paths, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 4, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_list_song_cover,
-        decodeErrorData: sse_decode_String,
+  Future<List<SongCover>> crateApiCollectionCollectionCoversForPaths({
+    required Collection that,
+    required List<String> paths,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_list_String(paths, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_song_cover,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionCoversForPathsConstMeta,
+        argValues: [that, paths],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryCoversForPathsConstMeta,
-      argValues: [that, paths],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryCoversForPathsConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionCoversForPathsConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_covers_for_paths",
+        debugName: "Collection_covers_for_paths",
         argNames: ["that", "paths"],
       );
 
   @override
-  Future<Playlist> crateApiLibraryLibraryCreateVirtual(
-      {required Library that, required String name}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_String(name, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 5, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_playlist,
-        decodeErrorData: sse_decode_String,
+  Future<Playlist> crateApiCollectionCollectionCreateVirtual({
+    required Collection that,
+    required String name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_playlist,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionCreateVirtualConstMeta,
+        argValues: [that, name],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryCreateVirtualConstMeta,
-      argValues: [that, name],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryCreateVirtualConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionCreateVirtualConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_create_virtual",
+        debugName: "Collection_create_virtual",
         argNames: ["that", "name"],
       );
 
   @override
-  Future<void> crateApiLibraryLibraryDeleteVirtual(
-      {required Library that, required BigInt id}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_u_64(id, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 6, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  Future<void> crateApiCollectionCollectionDeleteVirtual({
+    required Collection that,
+    required BigInt id,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_u_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionDeleteVirtualConstMeta,
+        argValues: [that, id],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryDeleteVirtualConstMeta,
-      argValues: [that, id],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryDeleteVirtualConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionDeleteVirtualConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_delete_virtual",
+        debugName: "Collection_delete_virtual",
         argNames: ["that", "id"],
       );
 
   @override
-  Future<BigInt> crateApiLibraryLibraryImportFromPlaylist(
-      {required Library that,
-      required BigInt targetId,
-      required BigInt sourceId,
-      required List<String> paths}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_u_64(targetId, serializer);
-        sse_encode_u_64(sourceId, serializer);
-        sse_encode_list_String(paths, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_u_64,
-        decodeErrorData: sse_decode_String,
+  Future<BigInt> crateApiCollectionCollectionImportFromPlaylist({
+    required Collection that,
+    required BigInt targetId,
+    required BigInt sourceId,
+    required List<String> paths,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_u_64(targetId, serializer);
+          sse_encode_u_64(sourceId, serializer);
+          sse_encode_list_String(paths, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_64,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionImportFromPlaylistConstMeta,
+        argValues: [that, targetId, sourceId, paths],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryImportFromPlaylistConstMeta,
-      argValues: [that, targetId, sourceId, paths],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryImportFromPlaylistConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionImportFromPlaylistConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_import_from_playlist",
+        debugName: "Collection_import_from_playlist",
         argNames: ["that", "targetId", "sourceId", "paths"],
       );
 
   @override
-  Future<Library> crateApiLibraryLibraryNew() {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 8, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData:
-            sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary,
-        decodeErrorData: sse_decode_String,
+  Future<Collection> crateApiCollectionCollectionNew() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionNewConstMeta,
+        argValues: [],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryNewConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryNewConstMeta => const TaskConstMeta(
-        debugName: "Library_new",
-        argNames: [],
-      );
+  TaskConstMeta get kCrateApiCollectionCollectionNewConstMeta =>
+      const TaskConstMeta(debugName: "Collection_new", argNames: []);
 
   @override
-  Future<Library> crateApiLibraryLibraryNewAt({required String dataDirectory}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_String(dataDirectory, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 9, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData:
-            sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary,
-        decodeErrorData: sse_decode_String,
+  Future<Collection> crateApiCollectionCollectionNewAt({
+    required String dataDirectory,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dataDirectory, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionNewAtConstMeta,
+        argValues: [dataDirectory],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryNewAtConstMeta,
-      argValues: [dataDirectory],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryNewAtConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionNewAtConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_new_at",
+        debugName: "Collection_new_at",
         argNames: ["dataDirectory"],
       );
 
   @override
-  Future<PlaybackMode> crateApiLibraryLibraryPlaybackMode(
-      {required Library that}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 10, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_playback_mode,
-        decodeErrorData: sse_decode_String,
+  Future<PlaybackMode> crateApiCollectionCollectionPlaybackMode({
+    required Collection that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_playback_mode,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionPlaybackModeConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryPlaybackModeConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryPlaybackModeConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionPlaybackModeConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_playback_mode",
+        debugName: "Collection_playback_mode",
         argNames: ["that"],
       );
 
   @override
-  Future<PlaybackSession?> crateApiLibraryLibraryPlaybackSession(
-      {required Library that}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 11, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_opt_box_autoadd_playback_session,
-        decodeErrorData: sse_decode_String,
+  Future<PlaybackSession?> crateApiCollectionCollectionPlaybackSession({
+    required Collection that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_playback_session,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionPlaybackSessionConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryPlaybackSessionConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryPlaybackSessionConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionPlaybackSessionConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_playback_session",
+        debugName: "Collection_playback_session",
         argNames: ["that"],
       );
 
   @override
-  Future<List<Playlist>> crateApiLibraryLibraryPlaylists(
-      {required Library that}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 12, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_list_playlist,
-        decodeErrorData: sse_decode_String,
+  Future<List<Playlist>> crateApiCollectionCollectionPlaylists({
+    required Collection that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_playlist,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionPlaylistsConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryPlaylistsConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryPlaylistsConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionPlaylistsConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_playlists",
+        debugName: "Collection_playlists",
         argNames: ["that"],
       );
 
   @override
-  Future<Playlist> crateApiLibraryLibraryRefresh(
-      {required Library that, required BigInt id}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_u_64(id, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 13, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_playlist,
-        decodeErrorData: sse_decode_String,
+  Future<Playlist> crateApiCollectionCollectionRefresh({
+    required Collection that,
+    required BigInt id,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_u_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_playlist,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionRefreshConstMeta,
+        argValues: [that, id],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryRefreshConstMeta,
-      argValues: [that, id],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryRefreshConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionRefreshConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_refresh",
+        debugName: "Collection_refresh",
         argNames: ["that", "id"],
       );
 
   @override
-  Future<void> crateApiLibraryLibraryRenameVirtual(
-      {required Library that, required BigInt id, required String name}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_u_64(id, serializer);
-        sse_encode_String(name, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 14, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  Future<void> crateApiCollectionCollectionRenameVirtual({
+    required Collection that,
+    required BigInt id,
+    required String name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_u_64(id, serializer);
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionRenameVirtualConstMeta,
+        argValues: [that, id, name],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryRenameVirtualConstMeta,
-      argValues: [that, id, name],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryRenameVirtualConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionRenameVirtualConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_rename_virtual",
+        debugName: "Collection_rename_virtual",
         argNames: ["that", "id", "name"],
       );
 
   @override
-  Future<void> crateApiLibraryLibrarySetPlaybackMode(
-      {required Library that, required PlaybackMode mode}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_playback_mode(mode, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 15, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  Future<void> crateApiCollectionCollectionSetPlaybackMode({
+    required Collection that,
+    required PlaybackMode mode,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_playback_mode(mode, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionSetPlaybackModeConstMeta,
+        argValues: [that, mode],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibrarySetPlaybackModeConstMeta,
-      argValues: [that, mode],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibrarySetPlaybackModeConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionSetPlaybackModeConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_set_playback_mode",
+        debugName: "Collection_set_playback_mode",
         argNames: ["that", "mode"],
       );
 
   @override
-  Future<void> crateApiLibraryLibrarySetPlaybackSession(
-      {required Library that, required PlaybackSession session}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_box_autoadd_playback_session(session, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 16, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  Future<void> crateApiCollectionCollectionSetPlaybackSession({
+    required Collection that,
+    required PlaybackSession session,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_box_autoadd_playback_session(session, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionSetPlaybackSessionConstMeta,
+        argValues: [that, session],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibrarySetPlaybackSessionConstMeta,
-      argValues: [that, session],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibrarySetPlaybackSessionConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionSetPlaybackSessionConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_set_playback_session",
+        debugName: "Collection_set_playback_session",
         argNames: ["that", "session"],
       );
 
   @override
-  Future<void> crateApiLibraryLibrarySetVolume(
-      {required Library that, required double volume}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        sse_encode_f_64(volume, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 17, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  Future<void> crateApiCollectionCollectionSetVolume({
+    required Collection that,
+    required double volume,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          sse_encode_f_64(volume, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionSetVolumeConstMeta,
+        argValues: [that, volume],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibrarySetVolumeConstMeta,
-      argValues: [that, volume],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibrarySetVolumeConstMeta =>
+  TaskConstMeta get kCrateApiCollectionCollectionSetVolumeConstMeta =>
       const TaskConstMeta(
-        debugName: "Library_set_volume",
+        debugName: "Collection_set_volume",
         argNames: ["that", "volume"],
       );
 
   @override
-  Future<double> crateApiLibraryLibraryVolume({required Library that}) {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-            that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 18, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_f_64,
-        decodeErrorData: sse_decode_String,
+  Future<double> crateApiCollectionCollectionVolume({
+    required Collection that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_f_64,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCollectionCollectionVolumeConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiLibraryLibraryVolumeConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiLibraryLibraryVolumeConstMeta =>
-      const TaskConstMeta(
-        debugName: "Library_volume",
-        argNames: ["that"],
-      );
+  TaskConstMeta get kCrateApiCollectionCollectionVolumeConstMeta =>
+      const TaskConstMeta(debugName: "Collection_volume", argNames: ["that"]);
 
   @override
   BigInt crateApiPlayerPlayerDurationMs({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_u_64,
-        decodeErrorData: null,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlayerPlayerDurationMsConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerDurationMsConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerDurationMsConstMeta =>
-      const TaskConstMeta(
-        debugName: "Player_duration_ms",
-        argNames: ["that"],
-      );
+      const TaskConstMeta(debugName: "Player_duration_ms", argNames: ["that"]);
 
   @override
   TrackMetadata? crateApiPlayerPlayerMetadata({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_opt_box_autoadd_track_metadata,
-        decodeErrorData: null,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_track_metadata,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlayerPlayerMetadataConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerMetadataConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerMetadataConstMeta =>
-      const TaskConstMeta(
-        debugName: "Player_metadata",
-        argNames: ["that"],
-      );
+      const TaskConstMeta(debugName: "Player_metadata", argNames: ["that"]);
 
   @override
   Player crateApiPlayerPlayerNew() {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData:
-            sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer,
-        decodeErrorData: null,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlayerPlayerNewConstMeta,
+        argValues: [],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerNewConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiPlayerPlayerNewConstMeta => const TaskConstMeta(
-        debugName: "Player_new",
-        argNames: [],
-      );
+  TaskConstMeta get kCrateApiPlayerPlayerNewConstMeta =>
+      const TaskConstMeta(debugName: "Player_new", argNames: []);
 
   @override
   void crateApiPlayerPlayerNext({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerNextConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerNextConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiPlayerPlayerNextConstMeta => const TaskConstMeta(
-        debugName: "Player_next",
-        argNames: ["that"],
-      );
+  TaskConstMeta get kCrateApiPlayerPlayerNextConstMeta =>
+      const TaskConstMeta(debugName: "Player_next", argNames: ["that"]);
 
   @override
   void crateApiPlayerPlayerOpen({required Player that, required String path}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        sse_encode_String(path, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_String(path, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerOpenConstMeta,
+        argValues: [that, path],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerOpenConstMeta,
-      argValues: [that, path],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiPlayerPlayerOpenConstMeta => const TaskConstMeta(
-        debugName: "Player_open",
-        argNames: ["that", "path"],
-      );
+  TaskConstMeta get kCrateApiPlayerPlayerOpenConstMeta =>
+      const TaskConstMeta(debugName: "Player_open", argNames: ["that", "path"]);
 
   @override
   void crateApiPlayerPlayerPause({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerPauseConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerPauseConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiPlayerPlayerPauseConstMeta => const TaskConstMeta(
-        debugName: "Player_pause",
-        argNames: ["that"],
-      );
+  TaskConstMeta get kCrateApiPlayerPlayerPauseConstMeta =>
+      const TaskConstMeta(debugName: "Player_pause", argNames: ["that"]);
 
   @override
   void crateApiPlayerPlayerPlay({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerPlayConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerPlayConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiPlayerPlayerPlayConstMeta => const TaskConstMeta(
-        debugName: "Player_play",
-        argNames: ["that"],
-      );
+  TaskConstMeta get kCrateApiPlayerPlayerPlayConstMeta =>
+      const TaskConstMeta(debugName: "Player_play", argNames: ["that"]);
 
   @override
-  void crateApiPlayerPlayerPlayIndex(
-      {required Player that, required BigInt index}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        sse_encode_u_64(index, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  void crateApiPlayerPlayerPlayIndex({
+    required Player that,
+    required BigInt index,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_u_64(index, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerPlayIndexConstMeta,
+        argValues: [that, index],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerPlayIndexConstMeta,
-      argValues: [that, index],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerPlayIndexConstMeta =>
@@ -911,99 +1128,113 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   BigInt crateApiPlayerPlayerPositionMs({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_u_64,
-        decodeErrorData: null,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlayerPlayerPositionMsConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerPositionMsConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerPositionMsConstMeta =>
-      const TaskConstMeta(
-        debugName: "Player_position_ms",
-        argNames: ["that"],
-      );
+      const TaskConstMeta(debugName: "Player_position_ms", argNames: ["that"]);
 
   @override
   void crateApiPlayerPlayerPrevious({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerPreviousConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerPreviousConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerPreviousConstMeta =>
-      const TaskConstMeta(
-        debugName: "Player_previous",
-        argNames: ["that"],
-      );
+      const TaskConstMeta(debugName: "Player_previous", argNames: ["that"]);
 
   @override
-  void crateApiPlayerPlayerSeek(
-      {required Player that, required BigInt positionMs}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        sse_encode_u_64(positionMs, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  void crateApiPlayerPlayerSeek({
+    required Player that,
+    required BigInt positionMs,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_u_64(positionMs, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerSeekConstMeta,
+        argValues: [that, positionMs],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerSeekConstMeta,
-      argValues: [that, positionMs],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerSeekConstMeta => const TaskConstMeta(
-        debugName: "Player_seek",
-        argNames: ["that", "positionMs"],
-      );
+    debugName: "Player_seek",
+    argNames: ["that", "positionMs"],
+  );
 
   @override
-  void crateApiPlayerPlayerSeekRelative(
-      {required Player that, required PlatformInt64 deltaMs}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        sse_encode_i_64(deltaMs, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  void crateApiPlayerPlayerSeekRelative({
+    required Player that,
+    required PlatformInt64 deltaMs,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_i_64(deltaMs, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerSeekRelativeConstMeta,
+        argValues: [that, deltaMs],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerSeekRelativeConstMeta,
-      argValues: [that, deltaMs],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerSeekRelativeConstMeta =>
@@ -1013,24 +1244,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  void crateApiPlayerPlayerSetPlaybackMode(
-      {required Player that, required PlaybackMode mode}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        sse_encode_playback_mode(mode, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  void crateApiPlayerPlayerSetPlaybackMode({
+    required Player that,
+    required PlaybackMode mode,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_playback_mode(mode, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerSetPlaybackModeConstMeta,
+        argValues: [that, mode],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerSetPlaybackModeConstMeta,
-      argValues: [that, mode],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerSetPlaybackModeConstMeta =>
@@ -1040,29 +1277,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  void crateApiPlayerPlayerSetQueue(
-      {required Player that,
-      required List<String> paths,
-      BigInt? startIndex,
-      required bool autoplay}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        sse_encode_list_String(paths, serializer);
-        sse_encode_opt_box_autoadd_u_64(startIndex, serializer);
-        sse_encode_bool(autoplay, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  void crateApiPlayerPlayerSetQueue({
+    required Player that,
+    required List<String> paths,
+    BigInt? startIndex,
+    required bool autoplay,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_list_String(paths, serializer);
+          sse_encode_opt_box_autoadd_u_64(startIndex, serializer);
+          sse_encode_bool(autoplay, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerSetQueueConstMeta,
+        argValues: [that, paths, startIndex, autoplay],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerSetQueueConstMeta,
-      argValues: [that, paths, startIndex, autoplay],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerSetQueueConstMeta =>
@@ -1072,24 +1314,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  void crateApiPlayerPlayerSetVolume(
-      {required Player that, required double volume}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        sse_encode_f_64(volume, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+  void crateApiPlayerPlayerSetVolume({
+    required Player that,
+    required double volume,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_f_64(volume, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerSetVolumeConstMeta,
+        argValues: [that, volume],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerSetVolumeConstMeta,
-      argValues: [that, volume],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerSetVolumeConstMeta =>
@@ -1100,207 +1348,224 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   PlayerSnapshot crateApiPlayerPlayerSnapshot({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_player_snapshot,
-        decodeErrorData: null,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_player_snapshot,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlayerPlayerSnapshotConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerSnapshotConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiPlayerPlayerSnapshotConstMeta =>
-      const TaskConstMeta(
-        debugName: "Player_snapshot",
-        argNames: ["that"],
-      );
+      const TaskConstMeta(debugName: "Player_snapshot", argNames: ["that"]);
 
   @override
   PlayerState crateApiPlayerPlayerState({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_player_state,
-        decodeErrorData: null,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_player_state,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlayerPlayerStateConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerStateConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiPlayerPlayerStateConstMeta => const TaskConstMeta(
-        debugName: "Player_state",
-        argNames: ["that"],
-      );
+  TaskConstMeta get kCrateApiPlayerPlayerStateConstMeta =>
+      const TaskConstMeta(debugName: "Player_state", argNames: ["that"]);
 
   @override
   void crateApiPlayerPlayerStop({required Player that}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-            that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_String,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerStopConstMeta,
+        argValues: [that],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiPlayerPlayerStopConstMeta,
-      argValues: [that],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiPlayerPlayerStopConstMeta => const TaskConstMeta(
-        debugName: "Player_stop",
-        argNames: ["that"],
-      );
+  TaskConstMeta get kCrateApiPlayerPlayerStopConstMeta =>
+      const TaskConstMeta(debugName: "Player_stop", argNames: ["that"]);
 
   @override
   Future<String?> crateApiFileDialogPickMusicDirectory() {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 37, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_opt_String,
-        decodeErrorData: sse_decode_String,
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 37,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiFileDialogPickMusicDirectoryConstMeta,
+        argValues: [],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiFileDialogPickMusicDirectoryConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiFileDialogPickMusicDirectoryConstMeta =>
-      const TaskConstMeta(
-        debugName: "pick_music_directory",
-        argNames: [],
-      );
+      const TaskConstMeta(debugName: "pick_music_directory", argNames: []);
 
   @override
   Future<List<String>?> crateApiFileDialogPickMusicFiles() {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 38, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_opt_list_String,
-        decodeErrorData: sse_decode_String,
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 38,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_list_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiFileDialogPickMusicFilesConstMeta,
+        argValues: [],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiFileDialogPickMusicFilesConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
+    );
   }
 
   TaskConstMeta get kCrateApiFileDialogPickMusicFilesConstMeta =>
-      const TaskConstMeta(
-        debugName: "pick_music_files",
-        argNames: [],
-      );
+      const TaskConstMeta(debugName: "pick_music_files", argNames: []);
 
   @override
   void crateApiSetupSetup() {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: null,
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSetupSetupConstMeta,
+        argValues: [],
+        apiImpl: this,
       ),
-      constMeta: kCrateApiSetupSetupConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
+    );
   }
 
-  TaskConstMeta get kCrateApiSetupSetupConstMeta => const TaskConstMeta(
-        debugName: "setup",
-        argNames: [],
-      );
+  TaskConstMeta get kCrateApiSetupSetupConstMeta =>
+      const TaskConstMeta(debugName: "setup", argNames: []);
 
   RustArcIncrementStrongCountFnType
-      get rust_arc_increment_strong_count_Library => wire
-          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary;
+  get rust_arc_increment_strong_count_Collection => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection;
 
   RustArcDecrementStrongCountFnType
-      get rust_arc_decrement_strong_count_Library => wire
-          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary;
+  get rust_arc_decrement_strong_count_Collection => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection;
 
   RustArcIncrementStrongCountFnType
-      get rust_arc_increment_strong_count_Player => wire
-          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer;
+  get rust_arc_increment_strong_count_Player => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer;
 
   RustArcDecrementStrongCountFnType
-      get rust_arc_decrement_strong_count_Player => wire
-          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer;
+  get rust_arc_decrement_strong_count_Player => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer;
 
   @protected
-  Library
-      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          dynamic raw) {
+  Collection
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return LibraryImpl.frbInternalDcoDecode(raw as List<dynamic>);
+    return CollectionImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
   Player
-      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          dynamic raw) {
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return PlayerImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
-  Library
-      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          dynamic raw) {
+  Collection
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return LibraryImpl.frbInternalDcoDecode(raw as List<dynamic>);
+    return CollectionImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
   Player
-      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          dynamic raw) {
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return PlayerImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
-  Library
-      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          dynamic raw) {
+  Collection
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return LibraryImpl.frbInternalDcoDecode(raw as List<dynamic>);
+    return CollectionImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
   Player
-      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          dynamic raw) {
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return PlayerImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
@@ -1684,57 +1949,75 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  Library
-      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          SseDeserializer deserializer) {
+  Collection
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return LibraryImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+    return CollectionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
   Player
-      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          SseDeserializer deserializer) {
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return PlayerImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
-  Library
-      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          SseDeserializer deserializer) {
+  Collection
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return LibraryImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+    return CollectionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
   Player
-      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          SseDeserializer deserializer) {
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return PlayerImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
-  Library
-      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          SseDeserializer deserializer) {
+  Collection
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return LibraryImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+    return CollectionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
   Player
-      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          SseDeserializer deserializer) {
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return PlayerImpl.frbInternalSseDecode(
-        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
@@ -1758,14 +2041,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   PlaybackSession sse_decode_box_autoadd_playback_session(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_playback_session(deserializer));
   }
 
   @protected
   TrackMetadata sse_decode_box_autoadd_track_metadata(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_track_metadata(deserializer));
   }
@@ -1907,10 +2192,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_description = sse_decode_opt_String(deserializer);
     var var_content = sse_decode_lyrics_content(deserializer);
     return Lyrics(
-        source: var_source,
-        language: var_language,
-        description: var_description,
-        content: var_content);
+      source: var_source,
+      language: var_language,
+      description: var_description,
+      content: var_content,
+    );
   }
 
   @protected
@@ -1924,7 +2210,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   LyricsContentKind sse_decode_lyrics_content_kind(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return LyricsContentKind.values[inner];
@@ -1970,7 +2257,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   PlaybackSession? sse_decode_opt_box_autoadd_playback_session(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
@@ -1982,7 +2270,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   TrackMetadata? sse_decode_opt_box_autoadd_track_metadata(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
@@ -2027,7 +2316,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   List<LyricsLine>? sse_decode_opt_list_lyrics_line(
-      SseDeserializer deserializer) {
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
@@ -2051,7 +2341,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_path = sse_decode_String(deserializer);
     var var_positionMs = sse_decode_u_64(deserializer);
     return PlaybackSession(
-        playlistId: var_playlistId, path: var_path, positionMs: var_positionMs);
+      playlistId: var_playlistId,
+      path: var_path,
+      positionMs: var_positionMs,
+    );
   }
 
   @protected
@@ -2066,14 +2359,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_queue = sse_decode_list_queue_item(deserializer);
     var var_metadata = sse_decode_opt_box_autoadd_track_metadata(deserializer);
     return PlayerSnapshot(
-        positionMs: var_positionMs,
-        durationMs: var_durationMs,
-        state: var_state,
-        volume: var_volume,
-        playbackMode: var_playbackMode,
-        currentIndex: var_currentIndex,
-        queue: var_queue,
-        metadata: var_metadata);
+      positionMs: var_positionMs,
+      durationMs: var_durationMs,
+      state: var_state,
+      volume: var_volume,
+      playbackMode: var_playbackMode,
+      currentIndex: var_currentIndex,
+      queue: var_queue,
+      metadata: var_metadata,
+    );
   }
 
   @protected
@@ -2092,11 +2386,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_directoryPath = sse_decode_opt_String(deserializer);
     var var_songs = sse_decode_list_song(deserializer);
     return Playlist(
-        id: var_id,
-        name: var_name,
-        kind: var_kind,
-        directoryPath: var_directoryPath,
-        songs: var_songs);
+      id: var_id,
+      name: var_name,
+      kind: var_kind,
+      directoryPath: var_directoryPath,
+      songs: var_songs,
+    );
   }
 
   @protected
@@ -2121,7 +2416,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_durationMs = sse_decode_u_64(deserializer);
     var var_metadata = sse_decode_track_metadata(deserializer);
     return Song(
-        path: var_path, durationMs: var_durationMs, metadata: var_metadata);
+      path: var_path,
+      durationMs: var_durationMs,
+      metadata: var_metadata,
+    );
   }
 
   @protected
@@ -2153,23 +2451,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_cover = sse_decode_opt_box_autoadd_cover_art(deserializer);
     var var_lyrics = sse_decode_list_lyrics(deserializer);
     return TrackMetadata(
-        title: var_title,
-        artist: var_artist,
-        album: var_album,
-        albumArtist: var_albumArtist,
-        composer: var_composer,
-        lyricist: var_lyricist,
-        performer: var_performer,
-        genre: var_genre,
-        comment: var_comment,
-        date: var_date,
-        year: var_year,
-        trackNumber: var_trackNumber,
-        trackTotal: var_trackTotal,
-        discNumber: var_discNumber,
-        discTotal: var_discTotal,
-        cover: var_cover,
-        lyrics: var_lyrics);
+      title: var_title,
+      artist: var_artist,
+      album: var_album,
+      albumArtist: var_albumArtist,
+      composer: var_composer,
+      lyricist: var_lyricist,
+      performer: var_performer,
+      genre: var_genre,
+      comment: var_comment,
+      date: var_date,
+      year: var_year,
+      trackNumber: var_trackNumber,
+      trackTotal: var_trackTotal,
+      discNumber: var_discNumber,
+      discTotal: var_discTotal,
+      cover: var_cover,
+      lyrics: var_lyrics,
+    );
   }
 
   @protected
@@ -2203,56 +2502,80 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
-      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          Library self, SseSerializer serializer) {
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    Collection self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
-        (self as LibraryImpl).frbInternalSseEncode(move: true), serializer);
+      (self as CollectionImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
   }
 
   @protected
   void
-      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          Player self, SseSerializer serializer) {
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    Player self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
-        (self as PlayerImpl).frbInternalSseEncode(move: true), serializer);
+      (self as PlayerImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
   }
 
   @protected
   void
-      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          Library self, SseSerializer serializer) {
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    Collection self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
-        (self as LibraryImpl).frbInternalSseEncode(move: false), serializer);
+      (self as CollectionImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
   }
 
   @protected
   void
-      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          Player self, SseSerializer serializer) {
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    Player self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
-        (self as PlayerImpl).frbInternalSseEncode(move: false), serializer);
+      (self as PlayerImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
   }
 
   @protected
   void
-      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLibrary(
-          Library self, SseSerializer serializer) {
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCollection(
+    Collection self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
-        (self as LibraryImpl).frbInternalSseEncode(move: null), serializer);
+      (self as CollectionImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
   }
 
   @protected
   void
-      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
-          Player self, SseSerializer serializer) {
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+    Player self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
-        (self as PlayerImpl).frbInternalSseEncode(move: null), serializer);
+      (self as PlayerImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
   }
 
   @protected
@@ -2269,21 +2592,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_box_autoadd_cover_art(
-      CoverArt self, SseSerializer serializer) {
+    CoverArt self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_cover_art(self, serializer);
   }
 
   @protected
   void sse_encode_box_autoadd_playback_session(
-      PlaybackSession self, SseSerializer serializer) {
+    PlaybackSession self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_playback_session(self, serializer);
   }
 
   @protected
   void sse_encode_box_autoadd_track_metadata(
-      TrackMetadata self, SseSerializer serializer) {
+    TrackMetadata self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_track_metadata(self, serializer);
   }
@@ -2345,7 +2674,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_list_lyrics_line(
-      List<LyricsLine> self, SseSerializer serializer) {
+    List<LyricsLine> self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -2364,7 +2695,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_list_prim_u_8_strict(
-      Uint8List self, SseSerializer serializer) {
+    Uint8List self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
@@ -2372,7 +2705,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_list_queue_item(
-      List<QueueItem> self, SseSerializer serializer) {
+    List<QueueItem> self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -2391,7 +2726,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_list_song_cover(
-      List<SongCover> self, SseSerializer serializer) {
+    List<SongCover> self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -2418,7 +2755,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_lyrics_content_kind(
-      LyricsContentKind self, SseSerializer serializer) {
+    LyricsContentKind self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
   }
@@ -2449,7 +2788,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_opt_box_autoadd_cover_art(
-      CoverArt? self, SseSerializer serializer) {
+    CoverArt? self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -2460,7 +2801,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_opt_box_autoadd_playback_session(
-      PlaybackSession? self, SseSerializer serializer) {
+    PlaybackSession? self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -2471,7 +2814,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_opt_box_autoadd_track_metadata(
-      TrackMetadata? self, SseSerializer serializer) {
+    TrackMetadata? self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -2501,8 +2846,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_list_String(List<String>? self,
-      SseSerializer serializer) {
+  void sse_encode_opt_list_String(
+    List<String>? self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -2513,7 +2860,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_opt_list_lyrics_line(
-      List<LyricsLine>? self, SseSerializer serializer) {
+    List<LyricsLine>? self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -2530,7 +2879,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_playback_session(
-      PlaybackSession self, SseSerializer serializer) {
+    PlaybackSession self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self.playlistId, serializer);
     sse_encode_String(self.path, serializer);
@@ -2539,7 +2890,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void sse_encode_player_snapshot(
-      PlayerSnapshot self, SseSerializer serializer) {
+    PlayerSnapshot self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self.positionMs, serializer);
     sse_encode_u_64(self.durationMs, serializer);
@@ -2648,123 +3001,129 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 }
 
 @sealed
-class LibraryImpl extends RustOpaque implements Library {
+class CollectionImpl extends RustOpaque implements Collection {
   // Not to be used by end users
-  LibraryImpl.frbInternalDcoDecode(List<dynamic> wire)
-      : super.frbInternalDcoDecode(wire, _kStaticData);
+  CollectionImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
 
   // Not to be used by end users
-  LibraryImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
-      : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+  CollectionImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
 
   static final _kStaticData = RustArcStaticData(
     rustArcIncrementStrongCount:
-        RustLib.instance.api.rust_arc_increment_strong_count_Library,
+        RustLib.instance.api.rust_arc_increment_strong_count_Collection,
     rustArcDecrementStrongCount:
-        RustLib.instance.api.rust_arc_decrement_strong_count_Library,
+        RustLib.instance.api.rust_arc_decrement_strong_count_Collection,
     rustArcDecrementStrongCountPtr:
-        RustLib.instance.api.rust_arc_decrement_strong_count_LibraryPtr,
+        RustLib.instance.api.rust_arc_decrement_strong_count_CollectionPtr,
   );
 
   /// Recursively scan and persist a music directory.
   Future<Playlist> addDirectory({required String path}) => RustLib.instance.api
-      .crateApiLibraryLibraryAddDirectory(that: this, path: path);
+      .crateApiCollectionCollectionAddDirectory(that: this, path: path);
 
   /// Inspect and add multiple files to a virtual playlist.
   Future<BigInt> addFiles({required BigInt id, required List<String> paths}) =>
-      RustLib.instance.api
-          .crateApiLibraryLibraryAddFiles(that: this, id: id, paths: paths);
+      RustLib.instance.api.crateApiCollectionCollectionAddFiles(
+        that: this,
+        id: id,
+        paths: paths,
+      );
 
   /// Clear any persisted playback session.
-  Future<void> clearPlaybackSession() =>
-      RustLib.instance.api.crateApiLibraryLibraryClearPlaybackSession(
-        that: this,
-      );
+  Future<void> clearPlaybackSession() => RustLib.instance.api
+      .crateApiCollectionCollectionClearPlaybackSession(that: this);
 
   /// Load cover art for the given song paths; unknown / cover-less paths are skipped.
   ///
   /// Prefer chunking large path lists on the Dart side so each FFI payload stays bounded.
   Future<List<SongCover>> coversForPaths({required List<String> paths}) =>
-      RustLib.instance.api
-          .crateApiLibraryLibraryCoversForPaths(that: this, paths: paths);
+      RustLib.instance.api.crateApiCollectionCollectionCoversForPaths(
+        that: this,
+        paths: paths,
+      );
 
   /// Create an empty user-managed playlist.
   Future<Playlist> createVirtual({required String name}) => RustLib.instance.api
-      .crateApiLibraryLibraryCreateVirtual(that: this, name: name);
+      .crateApiCollectionCollectionCreateVirtual(that: this, name: name);
 
   /// Delete a virtual playlist.
   Future<void> deleteVirtual({required BigInt id}) => RustLib.instance.api
-      .crateApiLibraryLibraryDeleteVirtual(that: this, id: id);
+      .crateApiCollectionCollectionDeleteVirtual(that: this, id: id);
 
   /// Import selected paths from one playlist into a virtual playlist.
   ///
   /// An empty path list imports every song in the source playlist.
-  Future<BigInt> importFromPlaylist(
-          {required BigInt targetId,
-          required BigInt sourceId,
-          required List<String> paths}) =>
-      RustLib.instance.api.crateApiLibraryLibraryImportFromPlaylist(
-          that: this, targetId: targetId, sourceId: sourceId, paths: paths);
+  Future<BigInt> importFromPlaylist({
+    required BigInt targetId,
+    required BigInt sourceId,
+    required List<String> paths,
+  }) => RustLib.instance.api.crateApiCollectionCollectionImportFromPlaylist(
+    that: this,
+    targetId: targetId,
+    sourceId: sourceId,
+    paths: paths,
+  );
 
   /// Load the persisted playback mode (defaults to sequential).
   Future<PlaybackMode> playbackMode() =>
-      RustLib.instance.api.crateApiLibraryLibraryPlaybackMode(
-        that: this,
-      );
+      RustLib.instance.api.crateApiCollectionCollectionPlaybackMode(that: this);
 
   /// Load the persisted playback session, if any.
-  Future<PlaybackSession?> playbackSession() =>
-      RustLib.instance.api.crateApiLibraryLibraryPlaybackSession(
-        that: this,
-      );
+  Future<PlaybackSession?> playbackSession() => RustLib.instance.api
+      .crateApiCollectionCollectionPlaybackSession(that: this);
 
   /// Return every directory and virtual playlist.
   ///
   /// Song rows omit cover bytes and lyrics so the first paint stays light; use
   /// [`Self::covers_for_paths`] to hydrate artwork afterward.
   Future<List<Playlist>> playlists() =>
-      RustLib.instance.api.crateApiLibraryLibraryPlaylists(
-        that: this,
-      );
+      RustLib.instance.api.crateApiCollectionCollectionPlaylists(that: this);
 
   /// Rescan a directory playlist or drop invalid virtual-list paths.
-  Future<Playlist> refresh({required BigInt id}) =>
-      RustLib.instance.api.crateApiLibraryLibraryRefresh(that: this, id: id);
+  Future<Playlist> refresh({required BigInt id}) => RustLib.instance.api
+      .crateApiCollectionCollectionRefresh(that: this, id: id);
 
   /// Rename a virtual playlist.
   Future<void> renameVirtual({required BigInt id, required String name}) =>
-      RustLib.instance.api
-          .crateApiLibraryLibraryRenameVirtual(that: this, id: id, name: name);
+      RustLib.instance.api.crateApiCollectionCollectionRenameVirtual(
+        that: this,
+        id: id,
+        name: name,
+      );
 
   /// Persist the playback mode for the next launch.
-  Future<void> setPlaybackMode({required PlaybackMode mode}) =>
-      RustLib.instance.api
-          .crateApiLibraryLibrarySetPlaybackMode(that: this, mode: mode);
+  Future<void> setPlaybackMode({required PlaybackMode mode}) => RustLib
+      .instance
+      .api
+      .crateApiCollectionCollectionSetPlaybackMode(that: this, mode: mode);
 
   /// Persist the current playback session for the next launch.
-  Future<void> setPlaybackSession({required PlaybackSession session}) => RustLib
-      .instance.api
-      .crateApiLibraryLibrarySetPlaybackSession(that: this, session: session);
+  Future<void> setPlaybackSession({required PlaybackSession session}) =>
+      RustLib.instance.api.crateApiCollectionCollectionSetPlaybackSession(
+        that: this,
+        session: session,
+      );
 
   /// Persist volume clamped to `[0, 1]`.
   Future<void> setVolume({required double volume}) => RustLib.instance.api
-      .crateApiLibraryLibrarySetVolume(that: this, volume: volume);
+      .crateApiCollectionCollectionSetVolume(that: this, volume: volume);
 
   /// Load the persisted volume (defaults to `1.0`).
-  Future<double> volume() => RustLib.instance.api.crateApiLibraryLibraryVolume(
-        that: this,
-      );
+  Future<double> volume() =>
+      RustLib.instance.api.crateApiCollectionCollectionVolume(that: this);
 }
 
 @sealed
 class PlayerImpl extends RustOpaque implements Player {
   // Not to be used by end users
   PlayerImpl.frbInternalDcoDecode(List<dynamic> wire)
-      : super.frbInternalDcoDecode(wire, _kStaticData);
+    : super.frbInternalDcoDecode(wire, _kStaticData);
 
   // Not to be used by end users
   PlayerImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
-      : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
 
   static final _kStaticData = RustArcStaticData(
     rustArcIncrementStrongCount:
@@ -2776,48 +3135,37 @@ class PlayerImpl extends RustOpaque implements Player {
   );
 
   /// Track duration in milliseconds (0 if unknown).
-  BigInt durationMs() => RustLib.instance.api.crateApiPlayerPlayerDurationMs(
-        that: this,
-      );
+  BigInt durationMs() =>
+      RustLib.instance.api.crateApiPlayerPlayerDurationMs(that: this);
 
   /// Tags, cover, and lyrics for the open track (`None` if idle / not ready yet).
   TrackMetadata? metadata() =>
-      RustLib.instance.api.crateApiPlayerPlayerMetadata(
-        that: this,
-      );
+      RustLib.instance.api.crateApiPlayerPlayerMetadata(that: this);
 
   /// Start the next queue item when available.
-  void next() => RustLib.instance.api.crateApiPlayerPlayerNext(
-        that: this,
-      );
+  void next() => RustLib.instance.api.crateApiPlayerPlayerNext(that: this);
 
   /// Open a local audio file. Does not start playback.
   void open({required String path}) =>
       RustLib.instance.api.crateApiPlayerPlayerOpen(that: this, path: path);
 
   /// Pause playback.
-  void pause() => RustLib.instance.api.crateApiPlayerPlayerPause(
-        that: this,
-      );
+  void pause() => RustLib.instance.api.crateApiPlayerPlayerPause(that: this);
 
   /// Start or resume playback.
-  void play() => RustLib.instance.api.crateApiPlayerPlayerPlay(
-        that: this,
-      );
+  void play() => RustLib.instance.api.crateApiPlayerPlayerPlay(that: this);
 
   /// Select and start one queue item.
   void playIndex({required BigInt index}) => RustLib.instance.api
       .crateApiPlayerPlayerPlayIndex(that: this, index: index);
 
   /// Current playback position in milliseconds.
-  BigInt positionMs() => RustLib.instance.api.crateApiPlayerPlayerPositionMs(
-        that: this,
-      );
+  BigInt positionMs() =>
+      RustLib.instance.api.crateApiPlayerPlayerPositionMs(that: this);
 
   /// Start the previous queue item when available.
-  void previous() => RustLib.instance.api.crateApiPlayerPlayerPrevious(
-        that: this,
-      );
+  void previous() =>
+      RustLib.instance.api.crateApiPlayerPlayerPrevious(that: this);
 
   /// Seek to an absolute position in milliseconds.
   void seek({required BigInt positionMs}) => RustLib.instance.api
@@ -2832,12 +3180,16 @@ class PlayerImpl extends RustOpaque implements Player {
       .crateApiPlayerPlayerSetPlaybackMode(that: this, mode: mode);
 
   /// Replace the playback queue and optionally prepare/start one item.
-  void setQueue(
-          {required List<String> paths,
-          BigInt? startIndex,
-          required bool autoplay}) =>
-      RustLib.instance.api.crateApiPlayerPlayerSetQueue(
-          that: this, paths: paths, startIndex: startIndex, autoplay: autoplay);
+  void setQueue({
+    required List<String> paths,
+    BigInt? startIndex,
+    required bool autoplay,
+  }) => RustLib.instance.api.crateApiPlayerPlayerSetQueue(
+    that: this,
+    paths: paths,
+    startIndex: startIndex,
+    autoplay: autoplay,
+  );
 
   /// Set output volume. Values outside 0–1 are clamped.
   void setVolume({required double volume}) => RustLib.instance.api
@@ -2845,17 +3197,12 @@ class PlayerImpl extends RustOpaque implements Player {
 
   /// Unified playback, queue, volume, and metadata snapshot.
   PlayerSnapshot snapshot() =>
-      RustLib.instance.api.crateApiPlayerPlayerSnapshot(
-        that: this,
-      );
+      RustLib.instance.api.crateApiPlayerPlayerSnapshot(that: this);
 
   /// Current playback state.
-  PlayerState state() => RustLib.instance.api.crateApiPlayerPlayerState(
-        that: this,
-      );
+  PlayerState state() =>
+      RustLib.instance.api.crateApiPlayerPlayerState(that: this);
 
   /// Stop playback and close the current media.
-  void stop() => RustLib.instance.api.crateApiPlayerPlayerStop(
-        that: this,
-      );
+  void stop() => RustLib.instance.api.crateApiPlayerPlayerStop(that: this);
 }

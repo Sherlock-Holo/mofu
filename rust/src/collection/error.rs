@@ -20,13 +20,13 @@ pub(crate) enum PoolFailure {
     PostCreateHook,
 }
 
-/// Errors from library persistence and playlist operations.
+/// Errors from collection persistence and playlist operations.
 #[derive(Debug, Error)]
-pub enum LibraryError {
+pub enum CollectionError {
     #[error("io error: {0}")]
     Io(#[from] io::Error),
-    #[error("invalid library manifest: {0}")]
-    Manifest(#[from] serde_json::Error),
+    #[error("json error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("database error: {0}")]
     Database(#[from] turso::Error),
     #[error("connection pool error: {0}")]
@@ -43,8 +43,8 @@ pub enum LibraryError {
     EmptyPlaylistName,
 }
 
-impl From<PoolError<LibraryError>> for LibraryError {
-    fn from(err: PoolError<LibraryError>) -> Self {
+impl From<PoolError<CollectionError>> for CollectionError {
+    fn from(err: PoolError<CollectionError>) -> Self {
         match err {
             PoolError::Backend(err) => err,
             PoolError::Timeout(TimeoutType::Wait) => Self::Pool(PoolFailure::WaitTimeout),
@@ -60,7 +60,7 @@ impl From<PoolError<LibraryError>> for LibraryError {
     }
 }
 
-impl From<BuildError> for LibraryError {
+impl From<BuildError> for CollectionError {
     fn from(err: BuildError) -> Self {
         match err {
             BuildError::NoRuntimeSpecified => Self::Pool(PoolFailure::NoRuntimeSpecified),
@@ -68,7 +68,7 @@ impl From<BuildError> for LibraryError {
     }
 }
 
-impl LibraryError {
+impl CollectionError {
     /// Whether the pooled connection is broken and should be discarded.
     ///
     /// Busy/BusySnapshot are lock contention, not a bad connection — those are
