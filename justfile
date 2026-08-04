@@ -31,8 +31,12 @@ build-icon:
 build-linux: build-icon
     flutter build linux --verbose
 
-# Release macOS .app bundle.
+# Release macOS .app bundle (arm64 only).
 build-macos: build-icon
+    FLUTTER_XCODE_ARCHS=arm64 flutter build macos --verbose
+
+# Release universal macOS .app bundle (x86_64 + arm64).
+build-macos-uni: build-icon
     flutter build macos --verbose
 
 # Install Linux binary, desktop entry, AppStream metadata, and icon theme files.
@@ -55,17 +59,26 @@ install-macos: build-macos
     rm -rf "{{applications-dst}}"
     cp -R "{{macos-app}}" "{{applications-dst}}"
 
-# Package the macOS .app into a drag-to-Applications DMG, with the app logo
-# set as the .dmg file icon (the .app icon itself is left untouched).
+# Package the arm64 macOS .app into a drag-to-Applications DMG.
 package-macos: build-macos
+    just _package-macos "{{macos-app}}" "arm64"
+
+# Package the universal macOS .app into a drag-to-Applications DMG.
+package-macos-uni: build-macos-uni
+    just _package-macos "{{macos-app}}" "universal"
+
+# Shared DMG packaging step. `app` is the .app bundle to package; `tag` is the
+# architecture label embedded in the DMG filename.
+_package-macos app tag:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    app="{{macos-app}}"
+    app="{{app}}"
+    tag="{{tag}}"
     dmg_dir="{{macos-release-dir}}"
     icns="$app/Contents/Resources/AppIcon.icns"
     version=$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" 2>/dev/null || echo "0.0.0")
-    dmg="$dmg_dir/{{name}}-${version}-macos.dmg"
+    dmg="$dmg_dir/{{name}}-${version}-macos-${tag}.dmg"
     mkdir -p "$dmg_dir"
 
     if ! command -v hdiutil >/dev/null 2>&1; then
