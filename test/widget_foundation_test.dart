@@ -18,7 +18,7 @@ void main() {
   });
 
   group('StrawberryCream theme', () {
-    testWidgets('builds MaterialApp with cream scaffold', (tester) async {
+    testWidgets('builds MaterialApp with white scaffold', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: StrawberryCream.theme(),
@@ -27,8 +27,7 @@ void main() {
       );
       expect(find.text('Mofu'), findsOneWidget);
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.backgroundColor ?? StrawberryCream.cream,
-          StrawberryCream.cream);
+      expect(scaffold.backgroundColor ?? Colors.white, Colors.white);
     });
   });
 

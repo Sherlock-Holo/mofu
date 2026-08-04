@@ -14,7 +14,7 @@ class PlaylistSidebar extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: StrawberryCream.creamDeep.withValues(alpha: 0.65),
+        color: Theme.of(context).colorScheme.surface,
         border: Border(
           right: BorderSide(
             color: StrawberryCream.strawberry.withValues(alpha: 0.12),

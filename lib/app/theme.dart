@@ -34,7 +34,7 @@ abstract final class StrawberryCream {
     return ThemeData(
       useMaterial3: true,
       colorScheme: base,
-      scaffoldBackgroundColor: cream,
+      scaffoldBackgroundColor: Colors.white,
       textTheme: const TextTheme(
         displayLarge: TextStyle(
           color: wine,

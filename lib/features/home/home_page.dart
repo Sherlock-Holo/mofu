@@ -71,9 +71,9 @@ class HomePage extends StatelessWidget {
             ),
       drawer: wide
           ? null
-          : const Drawer(
-              backgroundColor: StrawberryCream.cream,
-              child: SafeArea(child: PlaylistSidebar()),
+          : Drawer(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              child: const SafeArea(child: PlaylistSidebar()),
             ),
       body: body,
       bottomNavigationBar: const PlaybackBar(),
