@@ -29,6 +29,10 @@
 - 类型在当前文件**会冲突**：用 `as` 起别名绕开，例如 `use foo::Message as FooMessage`。
 - 没有直观别名可选时：保留一层 parent，例如 `foo::Message`；仍不要写 `crate::...` 完整路径。
 
+### 导入规则
+
+不得重新导入任何 Rust Edition 2024 标准库里已经在 prelude 的内容。
+
 ### 错误命名
 
 所有错误变量优先使用 `err` 作为变量名，除非出现冲突无法解决，可以改名为 `xxx_err`。

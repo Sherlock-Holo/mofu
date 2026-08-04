@@ -8,9 +8,9 @@ pub type PlaylistId = u64;
 /// Database-assigned song row identifier.
 pub type SongId = i64;
 
-/// File extension used for a cached cover image.
+/// On-disk file type for a cached cover image.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CoverExt {
+pub(crate) enum CoverFileType {
     Jpg,
     Png,
     Webp,
@@ -18,7 +18,7 @@ pub(crate) enum CoverExt {
     Bin,
 }
 
-impl CoverExt {
+impl CoverFileType {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Jpg => ".jpg",
@@ -26,17 +26,6 @@ impl CoverExt {
             Self::Webp => ".webp",
             Self::Gif => ".gif",
             Self::Bin => ".bin",
-        }
-    }
-
-    pub(crate) fn parse(value: &str) -> Option<Self> {
-        match value {
-            ".jpg" => Some(Self::Jpg),
-            ".png" => Some(Self::Png),
-            ".webp" => Some(Self::Webp),
-            ".gif" => Some(Self::Gif),
-            ".bin" => Some(Self::Bin),
-            _ => None,
         }
     }
 
@@ -108,30 +97,6 @@ impl StoredPlaybackMode {
     }
 }
 
-/// How a playlist kind is stored in `catalog.db`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StoredPlaylistKind {
-    Directory,
-    Virtual,
-}
-
-impl StoredPlaylistKind {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Directory => "directory",
-            Self::Virtual => "virtual",
-        }
-    }
-
-    pub(crate) fn parse(value: &str) -> Option<Self> {
-        match value {
-            "directory" => Some(Self::Directory),
-            "virtual" => Some(Self::Virtual),
-            _ => None,
-        }
-    }
-}
-
 /// Song tags persisted in `catalog.db` (no cover bytes / lyrics).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct SongTags {
@@ -151,11 +116,14 @@ pub(crate) struct SongTags {
     pub disc_number: Option<u64>,
     pub disc_total: Option<u64>,
     pub cover_mime: Option<String>,
-    pub cover_ext: Option<CoverExt>,
+    pub cover_file_type: Option<CoverFileType>,
 }
 
 impl SongTags {
-    pub(crate) fn from_metadata(metadata: &TrackMetadata, cover_ext: Option<CoverExt>) -> Self {
+    pub(crate) fn from_metadata(
+        metadata: &TrackMetadata,
+        cover_file_type: Option<CoverFileType>,
+    ) -> Self {
         Self {
             title: metadata.title.clone(),
             artist: metadata.artist.clone(),
@@ -176,7 +144,7 @@ impl SongTags {
                 .cover
                 .as_ref()
                 .and_then(|cover| cover.mime_type.clone()),
-            cover_ext,
+            cover_file_type,
         }
     }
 }

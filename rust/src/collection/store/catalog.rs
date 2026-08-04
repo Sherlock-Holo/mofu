@@ -1,33 +1,54 @@
 //! `catalog.db`: playlists, songs (tags only), playlist membership.
 
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::Path;
+use std::time::Duration;
 
-use turso::{Connection, Value, params};
+use async_compat::CompatExt;
+use futures_timer::Delay;
+use toasty::Db;
+use toasty::db::Executor;
+use toasty_driver_turso::Turso;
+use tracing::{error, warn};
 
-use super::super::error::CollectionError;
-use super::super::model::{
-    CoverExt, PlaybackSession, PlaylistId, PlaylistKind, PlaylistRow, SongId, SongRow, SongTags,
-    StoredPlaybackMode, StoredPlaylistKind,
+use super::Catalog;
+use super::models::{Meta, Playlist, PlaylistSong, Song, StoredCoverFileType, StoredPlaylistKind};
+use crate::collection::error::{CatalogDataError, CatalogNumericField, CollectionError};
+use crate::collection::model::{
+    CoverFileType, PlaybackSession, PlaylistId, PlaylistKind, PlaylistRow, SongId, SongRow,
+    SongTags, StoredPlaybackMode,
 };
-use super::reconnect::ReconnectableDb;
 
 const SCHEMA_VERSION: &str = "1";
 const PLAYBACK_MODE_KEY: &str = "playback_mode";
 const VOLUME_KEY: &str = "volume";
 const PLAYBACK_SESSION_KEY: &str = "playback_session";
 const DEFAULT_VOLUME: f64 = 1.0;
+/// Same-op retries after a serialization / MVCC conflict.
+const MAX_SERIALIZATION_RETRIES: usize = 20;
+const SERIALIZATION_RETRY_DELAY: Duration = Duration::from_millis(10);
+/// Keep `IN` lists under typical SQLite/Turso variable limits.
+const IN_LIST_BATCH: usize = 200;
 
-const SCHEMA_SQL: &str = r#"
+/// `CREATE TABLE/INDEX IF NOT EXISTS` so partial schemas and open races are safe.
+/// Kept in lockstep with [`super::models`].
+const SCHEMA_STATEMENTS: &[&str] = &[
+    r#"
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL
-);
+)
+"#,
+    r#"
 CREATE TABLE IF NOT EXISTS playlists (
     id INTEGER PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     kind TEXT NOT NULL,
     directory_path TEXT
-);
+)
+"#,
+    r#"
 CREATE TABLE IF NOT EXISTS songs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
@@ -49,755 +70,87 @@ CREATE TABLE IF NOT EXISTS songs (
     disc_total INTEGER,
     cover_mime TEXT,
     cover_ext TEXT
-);
+)
+"#,
+    r#"
 CREATE TABLE IF NOT EXISTS playlist_songs (
     playlist_id INTEGER NOT NULL,
     song_id INTEGER NOT NULL,
     position INTEGER NOT NULL,
     PRIMARY KEY (playlist_id, song_id),
     UNIQUE (playlist_id, position)
-);
-"#;
+)
+"#,
+    "CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_id ON playlist_songs (playlist_id)",
+    "CREATE INDEX IF NOT EXISTS idx_playlist_songs_song_id ON playlist_songs (song_id)",
+];
 
-/// Catalog database store.
+/// Catalog database store backed by Toasty + Turso.
 pub(crate) struct CatalogStore {
-    db: ReconnectableDb,
+    db: Db,
 }
 
 impl CatalogStore {
     pub(crate) async fn open(path: &Path) -> Result<Self, CollectionError> {
-        let db = ReconnectableDb::open(path).await?;
-        let store = Self { db };
-        store.migrate().await?;
-        Ok(store)
-    }
-
-    pub(crate) async fn migrate(&self) -> Result<(), CollectionError> {
-        self.db
-            .run(async move |conn| {
-                conn.execute_batch(SCHEMA_SQL).await?;
-                conn.execute(
-                    "INSERT OR IGNORE INTO meta (key, value) VALUES (?1, ?2)",
-                    params!["schema_version", SCHEMA_VERSION],
-                )
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let path = path.to_path_buf();
+        async move {
+            let driver = Turso::file(&path).concurrent_writes();
+            let mut db = Db::builder()
+                .models(toasty::models!(Meta, Playlist, Song, PlaylistSong))
+                .build(driver)
                 .await?;
-                Ok(())
-            })
-            .await
-    }
-
-    pub(crate) async fn next_playlist_id(&self) -> Result<PlaylistId, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query("SELECT COALESCE(MAX(id), 0) FROM playlists", ())
-                    .await?;
-                let row = rows
-                    .next()
-                    .await?
-                    .ok_or_else(|| CollectionError::Database(turso::Error::QueryReturnedNoRows))?;
-                let max_id = row.get::<i64>(0)? as PlaylistId;
-                Ok(max_id.saturating_add(1).max(1))
-            })
-            .await
-    }
-
-    pub(crate) async fn list_playlist_rows(&self) -> Result<Vec<PlaylistRow>, CollectionError> {
-        self.db
-            .run(async move |conn| Self::list_playlist_rows_on(conn).await)
-            .await
-    }
-
-    async fn list_playlist_rows_on(conn: &Connection) -> Result<Vec<PlaylistRow>, CollectionError> {
-        let mut rows = conn
-            .query(
-                "SELECT id, name, kind, directory_path FROM playlists ORDER BY id",
-                (),
-            )
-            .await?;
-        let mut playlists = Vec::new();
-        while let Some(row) = rows.next().await? {
-            let id = row.get::<i64>(0)? as PlaylistId;
-            let name = row.get::<String>(1)?;
-            let kind_raw = row.get::<String>(2)?;
-            let directory_path = match row.get_value(3)? {
-                Value::Null => None,
-                Value::Text(text) => Some(text),
-                other => {
-                    return Err(CollectionError::Database(turso::Error::ConversionFailure(
-                        format!("unexpected directory_path value: {other:?}"),
-                    )));
-                }
-            };
-            let kind = match StoredPlaylistKind::parse(&kind_raw) {
-                Some(StoredPlaylistKind::Directory) => match directory_path {
-                    Some(path) => PlaylistKind::Directory { path },
-                    None => {
-                        return Err(CollectionError::Database(turso::Error::ConversionFailure(
-                            "directory playlist missing directory_path".to_owned(),
-                        )));
-                    }
-                },
-                Some(StoredPlaylistKind::Virtual) => PlaylistKind::Virtual,
-                None => {
-                    return Err(CollectionError::Database(turso::Error::ConversionFailure(
-                        format!("unknown playlist kind: {kind_raw}"),
-                    )));
-                }
-            };
-            playlists.push(PlaylistRow { id, name, kind });
-        }
-        Ok(playlists)
-    }
-
-    pub(crate) async fn playlist_row(
-        &self,
-        id: PlaylistId,
-    ) -> Result<PlaylistRow, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query(
-                        "SELECT id, name, kind, directory_path FROM playlists WHERE id = ?1",
-                        params![id as i64],
-                    )
-                    .await?;
-                let row = rows
-                    .next()
-                    .await?
-                    .ok_or(CollectionError::PlaylistNotFound)?;
-                let name = row.get::<String>(1)?;
-                let kind_raw = row.get::<String>(2)?;
-                let directory_path = match row.get_value(3)? {
-                    Value::Null => None,
-                    Value::Text(text) => Some(text),
-                    other => {
-                        return Err(CollectionError::Database(turso::Error::ConversionFailure(
-                            format!("unexpected directory_path value: {other:?}"),
-                        )));
-                    }
-                };
-                let kind = match StoredPlaylistKind::parse(&kind_raw) {
-                    Some(StoredPlaylistKind::Directory) => match directory_path {
-                        Some(path) => PlaylistKind::Directory { path },
-                        None => {
-                            return Err(CollectionError::Database(
-                                turso::Error::ConversionFailure(
-                                    "directory playlist missing directory_path".to_owned(),
-                                ),
-                            ));
-                        }
-                    },
-                    Some(StoredPlaylistKind::Virtual) => PlaylistKind::Virtual,
-                    None => {
-                        return Err(CollectionError::Database(turso::Error::ConversionFailure(
-                            format!("unknown playlist kind: {kind_raw}"),
-                        )));
-                    }
-                };
-                Ok(PlaylistRow { id, name, kind })
-            })
-            .await
-    }
-
-    pub(crate) async fn songs_for_playlist(
-        &self,
-        playlist_id: PlaylistId,
-    ) -> Result<Vec<SongRow>, CollectionError> {
-        self.db
-            .run(async move |conn| Self::songs_for_playlist_on(conn, playlist_id).await)
-            .await
-    }
-
-    /// Look up catalog rows for the given absolute paths (order not preserved).
-    pub(crate) async fn song_rows_for_paths(
-        &self,
-        paths: &[String],
-    ) -> Result<Vec<SongRow>, CollectionError> {
-        if paths.is_empty() {
-            return Ok(Vec::new());
-        }
-        let paths = paths.to_vec();
-        self.db
-            .run(async move |conn| Self::song_rows_for_paths_on(conn, &paths).await)
-            .await
-    }
-
-    async fn song_rows_for_paths_on(
-        conn: &Connection,
-        paths: &[String],
-    ) -> Result<Vec<SongRow>, CollectionError> {
-        // SQLite 变量数有上限；按批查询避免超限。
-        const BATCH: usize = 200;
-        let mut songs = Vec::new();
-        for chunk in paths.chunks(BATCH) {
-            let placeholders = (1..=chunk.len())
-                .map(|index| format!("?{index}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let sql = format!(
-                r#"
-                SELECT id, path, duration_ms,
-                       title, artist, album, album_artist, composer, lyricist,
-                       performer, genre, comment, date, year,
-                       track_number, track_total, disc_number, disc_total,
-                       cover_mime, cover_ext
-                FROM songs
-                WHERE path IN ({placeholders})
-                "#
-            );
-            let params: Vec<Value> = chunk.iter().map(|path| Value::Text(path.clone())).collect();
-            let mut rows = conn.query(&sql, params).await?;
-            while let Some(row) = rows.next().await? {
-                songs.push(Self::song_row_from_query(row)?);
-            }
-        }
-        Ok(songs)
-    }
-
-    async fn songs_for_playlist_on(
-        conn: &Connection,
-        playlist_id: PlaylistId,
-    ) -> Result<Vec<SongRow>, CollectionError> {
-        let mut rows = conn
-            .query(
-                r#"
-                SELECT s.id, s.path, s.duration_ms,
-                       s.title, s.artist, s.album, s.album_artist, s.composer, s.lyricist,
-                       s.performer, s.genre, s.comment, s.date, s.year,
-                       s.track_number, s.track_total, s.disc_number, s.disc_total,
-                       s.cover_mime, s.cover_ext
-                FROM playlist_songs ps
-                JOIN songs s ON s.id = ps.song_id
-                WHERE ps.playlist_id = ?1
-                ORDER BY ps.position
-                "#,
-                params![playlist_id as i64],
-            )
-            .await?;
-        let mut songs = Vec::new();
-        while let Some(row) = rows.next().await? {
-            songs.push(Self::song_row_from_query(row)?);
-        }
-        Ok(songs)
-    }
-
-    fn song_row_from_query(row: turso::Row) -> Result<SongRow, CollectionError> {
-        Ok(SongRow {
-            id: row.get::<i64>(0)?,
-            path: row.get::<String>(1)?,
-            duration_ms: row.get::<i64>(2)? as u64,
-            tags: SongTags {
-                title: Self::opt_text(&row, 3)?,
-                artist: Self::opt_text(&row, 4)?,
-                album: Self::opt_text(&row, 5)?,
-                album_artist: Self::opt_text(&row, 6)?,
-                composer: Self::opt_text(&row, 7)?,
-                lyricist: Self::opt_text(&row, 8)?,
-                performer: Self::opt_text(&row, 9)?,
-                genre: Self::opt_text(&row, 10)?,
-                comment: Self::opt_text(&row, 11)?,
-                date: Self::opt_text(&row, 12)?,
-                year: Self::opt_u16(&row, 13)?,
-                track_number: Self::opt_u64(&row, 14)?,
-                track_total: Self::opt_u64(&row, 15)?,
-                disc_number: Self::opt_u64(&row, 16)?,
-                disc_total: Self::opt_u64(&row, 17)?,
-                cover_mime: Self::opt_text(&row, 18)?,
-                cover_ext: Self::opt_cover_ext(&row, 19)?,
-            },
-        })
-    }
-
-    fn opt_cover_ext(row: &turso::Row, idx: usize) -> Result<Option<CoverExt>, CollectionError> {
-        match Self::opt_text(row, idx)? {
-            None => Ok(None),
-            Some(text) => match CoverExt::parse(&text) {
-                Some(ext) => Ok(Some(ext)),
-                None => Err(CollectionError::Database(turso::Error::ConversionFailure(
-                    format!("unknown cover_ext: {text}"),
-                ))),
-            },
-        }
-    }
-
-    fn opt_text(row: &turso::Row, idx: usize) -> Result<Option<String>, CollectionError> {
-        match row.get_value(idx)? {
-            Value::Null => Ok(None),
-            Value::Text(text) => Ok(Some(text)),
-            other => Err(CollectionError::Database(turso::Error::ConversionFailure(
-                format!("expected text/null at {idx}, got {other:?}"),
-            ))),
-        }
-    }
-
-    fn opt_u16(row: &turso::Row, idx: usize) -> Result<Option<u16>, CollectionError> {
-        match row.get_value(idx)? {
-            Value::Null => Ok(None),
-            Value::Integer(value) => Ok(Some(value as u16)),
-            other => Err(CollectionError::Database(turso::Error::ConversionFailure(
-                format!("expected int/null at {idx}, got {other:?}"),
-            ))),
-        }
-    }
-
-    fn opt_u64(row: &turso::Row, idx: usize) -> Result<Option<u64>, CollectionError> {
-        match row.get_value(idx)? {
-            Value::Null => Ok(None),
-            Value::Integer(value) => Ok(Some(value as u64)),
-            other => Err(CollectionError::Database(turso::Error::ConversionFailure(
-                format!("expected int/null at {idx}, got {other:?}"),
-            ))),
-        }
-    }
-
-    pub(crate) async fn insert_playlist(
-        &self,
-        id: PlaylistId,
-        name: &str,
-        kind: &PlaylistKind,
-    ) -> Result<(), CollectionError> {
-        let (stored_kind, directory_path) = match kind {
-            PlaylistKind::Directory { path } => {
-                (StoredPlaylistKind::Directory, Some(path.as_str()))
-            }
-            PlaylistKind::Virtual => (StoredPlaylistKind::Virtual, None),
-        };
-        let name = name.to_owned();
-        let directory_path = directory_path.map(str::to_owned);
-        self.db
-            .run(async move |conn| {
-                conn.execute(
-                    "INSERT INTO playlists (id, name, kind, directory_path) VALUES (?1, ?2, ?3, ?4)",
-                    params![
-                        id as i64,
-                        name.as_str(),
-                        stored_kind.as_str(),
-                        directory_path.clone(),
-                    ],
-                )
-                    .await?;
-                Ok(())
-            })
-            .await
-    }
-
-    pub(crate) async fn find_directory_playlist_id(
-        &self,
-        directory_path: &str,
-    ) -> Result<Option<PlaylistId>, CollectionError> {
-        let directory_path = directory_path.to_owned();
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query(
-                        "SELECT id FROM playlists WHERE kind = ?1 AND directory_path = ?2",
-                        params![
-                            StoredPlaylistKind::Directory.as_str(),
-                            directory_path.as_str()
-                        ],
-                    )
-                    .await?;
-                Ok(match rows.next().await? {
-                    Some(row) => Some(row.get::<i64>(0)? as PlaylistId),
-                    None => None,
-                })
-            })
-            .await
-    }
-
-    pub(crate) async fn rename_playlist(
-        &self,
-        id: PlaylistId,
-        name: &str,
-    ) -> Result<(), CollectionError> {
-        let name = name.to_owned();
-        self.db
-            .run(async move |conn| {
-                let changed = conn
-                    .execute(
-                        "UPDATE playlists SET name = ?1 WHERE id = ?2",
-                        params![name.as_str(), id as i64],
-                    )
-                    .await?;
-                if changed == 0 {
-                    return Err(CollectionError::PlaylistNotFound);
-                }
-                Ok(())
-            })
-            .await
-    }
-
-    pub(crate) async fn delete_playlist(&self, id: PlaylistId) -> Result<(), CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let tx = conn.transaction().await?;
-                tx.execute(
-                    "DELETE FROM playlist_songs WHERE playlist_id = ?1",
-                    params![id as i64],
-                )
+            Self::ensure_schema(&mut db).await?;
+            // Seed schema version without overwriting an existing value.
+            Meta::upsert_by_key("schema_version")
+                .value(SCHEMA_VERSION)
+                .or_ignore()
+                .exec(&mut db)
                 .await?;
-                let changed = tx
-                    .execute("DELETE FROM playlists WHERE id = ?1", params![id as i64])
-                    .await?;
-                if changed == 0 {
-                    return Err(CollectionError::PlaylistNotFound);
-                }
-                tx.commit().await?;
-                Ok(())
-            })
-            .await
+            Ok(Self { db })
+        }
+        .compat()
+        .await
     }
 
-    /// Upsert song tags by path; returns song id.
-    pub(crate) async fn upsert_song(
-        &self,
-        path: &str,
-        duration_ms: u64,
-        tags: &SongTags,
-    ) -> Result<SongId, CollectionError> {
-        let path = path.to_owned();
-        let tags = tags.clone();
-        self.db
-            .run(async move |conn| Self::upsert_song_on(conn, &path, duration_ms, &tags).await)
-            .await
+    /// Ensure catalog tables/indexes exist (`IF NOT EXISTS`, race-safe).
+    async fn ensure_schema(db: &mut Db) -> Result<(), CollectionError> {
+        for sql in SCHEMA_STATEMENTS {
+            toasty::sql::statement(*sql).exec(db).await?;
+        }
+        Ok(())
     }
 
-    async fn upsert_song_on(
-        conn: &Connection,
-        path: &str,
-        duration_ms: u64,
-        tags: &SongTags,
-    ) -> Result<SongId, CollectionError> {
-        conn.execute(
-            r#"
-            INSERT INTO songs (
-                path, duration_ms, title, artist, album, album_artist, composer, lyricist,
-                performer, genre, comment, date, year, track_number, track_total,
-                disc_number, disc_total, cover_mime, cover_ext
-            ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19
-            )
-            ON CONFLICT(path) DO UPDATE SET
-                duration_ms = excluded.duration_ms,
-                title = excluded.title,
-                artist = excluded.artist,
-                album = excluded.album,
-                album_artist = excluded.album_artist,
-                composer = excluded.composer,
-                lyricist = excluded.lyricist,
-                performer = excluded.performer,
-                genre = excluded.genre,
-                comment = excluded.comment,
-                date = excluded.date,
-                year = excluded.year,
-                track_number = excluded.track_number,
-                track_total = excluded.track_total,
-                disc_number = excluded.disc_number,
-                disc_total = excluded.disc_total,
-                cover_mime = excluded.cover_mime,
-                cover_ext = excluded.cover_ext
-            "#,
-            params![
-                path,
-                duration_ms as i64,
-                tags.title.clone(),
-                tags.artist.clone(),
-                tags.album.clone(),
-                tags.album_artist.clone(),
-                tags.composer.clone(),
-                tags.lyricist.clone(),
-                tags.performer.clone(),
-                tags.genre.clone(),
-                tags.comment.clone(),
-                tags.date.clone(),
-                tags.year.map(|year| year as i64),
-                tags.track_number.map(|value| value as i64),
-                tags.track_total.map(|value| value as i64),
-                tags.disc_number.map(|value| value as i64),
-                tags.disc_total.map(|value| value as i64),
-                tags.cover_mime.clone(),
-                tags.cover_ext.map(CoverExt::as_str),
-            ],
-        )
-        .await?;
-
-        let mut rows = conn
-            .query("SELECT id FROM songs WHERE path = ?1", params![path])
-            .await?;
-        let row = rows
-            .next()
-            .await?
-            .ok_or_else(|| CollectionError::Database(turso::Error::QueryReturnedNoRows))?;
-        Ok(row.get::<i64>(0)?)
-    }
-
-    pub(crate) async fn attach_song(
-        &self,
-        playlist_id: PlaylistId,
-        song_id: SongId,
-        position: i64,
-    ) -> Result<(), CollectionError> {
-        self.db
-            .run(async move |conn| {
-                conn.execute(
-                    r#"
-                    INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, position)
-                    VALUES (?1, ?2, ?3)
-                    "#,
-                    params![playlist_id as i64, song_id, position],
-                )
-                .await?;
-                Ok(())
-            })
-            .await
-    }
-
-    pub(crate) async fn replace_playlist_songs(
-        &self,
-        playlist_id: PlaylistId,
-        song_ids: &[SongId],
-    ) -> Result<(), CollectionError> {
-        let song_ids = song_ids.to_vec();
-        self.db
-            .run(async move |conn| {
-                // DELETE then INSERT must be atomic: Busy mid-way would leave an empty playlist.
-                let tx = conn.transaction().await?;
-                tx.execute(
-                    "DELETE FROM playlist_songs WHERE playlist_id = ?1",
-                    params![playlist_id as i64],
-                )
-                    .await?;
-                for (position, song_id) in song_ids.iter().copied().enumerate() {
-                    tx.execute(
-                        "INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?1, ?2, ?3)",
-                        params![playlist_id as i64, song_id, position as i64],
-                    )
-                        .await?;
-                }
-                tx.commit().await?;
-                Ok(())
-            })
-            .await
-    }
-
-    pub(crate) async fn playlist_song_paths(
-        &self,
-        playlist_id: PlaylistId,
-    ) -> Result<Vec<String>, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query(
-                        r#"
-                        SELECT s.path
-                        FROM playlist_songs ps
-                        JOIN songs s ON s.id = ps.song_id
-                        WHERE ps.playlist_id = ?1
-                        ORDER BY ps.position
-                        "#,
-                        params![playlist_id as i64],
-                    )
-                    .await?;
-                let mut paths = Vec::new();
-                while let Some(row) = rows.next().await? {
-                    paths.push(row.get::<String>(0)?);
-                }
-                Ok(paths)
-            })
-            .await
-    }
-
-    /// Delete songs not referenced by any playlist; returns removed song ids and cover_ext.
-    pub(crate) async fn garbage_collect_orphan_songs(
-        &self,
-    ) -> Result<Vec<(SongId, Option<CoverExt>)>, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query(
-                        r#"
-                        SELECT id, cover_ext FROM songs
-                        WHERE id NOT IN (SELECT DISTINCT song_id FROM playlist_songs)
-                        "#,
-                        (),
-                    )
-                    .await?;
-                let mut orphans = Vec::new();
-                while let Some(row) = rows.next().await? {
-                    let id = row.get::<i64>(0)?;
-                    let cover_ext = Self::opt_cover_ext(&row, 1)?;
-                    orphans.push((id, cover_ext));
-                }
-                if !orphans.is_empty() {
-                    conn.execute(
-                        "DELETE FROM songs WHERE id NOT IN (SELECT DISTINCT song_id FROM playlist_songs)",
-                        (),
-                    )
-                        .await?;
-                }
-                Ok(orphans)
-            })
-            .await
-    }
-
-    pub(crate) async fn max_position(
-        &self,
-        playlist_id: PlaylistId,
-    ) -> Result<i64, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query(
-                        "SELECT COALESCE(MAX(position), -1) FROM playlist_songs WHERE playlist_id = ?1",
-                        params![playlist_id as i64],
-                    )
-                    .await?;
-                let row = rows
-                    .next()
-                    .await?
-                    .ok_or_else(|| CollectionError::Database(turso::Error::QueryReturnedNoRows))?;
-                Ok(row.get::<i64>(0)?)
-            })
-            .await
-    }
-
-    /// Load persisted playback mode; missing key defaults to sequential.
-    pub(crate) async fn playback_mode(&self) -> Result<StoredPlaybackMode, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query(
-                        "SELECT value FROM meta WHERE key = ?1",
-                        params![PLAYBACK_MODE_KEY],
-                    )
-                    .await?;
-                let Some(row) = rows.next().await? else {
-                    return Ok(StoredPlaybackMode::Sequential);
-                };
-                let value = row.get::<String>(0)?;
-                StoredPlaybackMode::parse(&value).ok_or_else(|| {
-                    CollectionError::Database(turso::Error::ConversionFailure(format!(
-                        "unknown playback_mode: {value}"
-                    )))
-                })
-            })
-            .await
-    }
-
-    pub(crate) async fn set_playback_mode(
-        &self,
-        mode: StoredPlaybackMode,
-    ) -> Result<(), CollectionError> {
-        self.db
-            .run(async move |conn| {
-                conn.execute(
-                    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    params![PLAYBACK_MODE_KEY, mode.as_str()],
-                )
-                    .await?;
-                Ok(())
-            })
-            .await
-    }
-
-    /// Load persisted volume; missing key defaults to `1.0`.
-    pub(crate) async fn volume(&self) -> Result<f64, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query("SELECT value FROM meta WHERE key = ?1", params![VOLUME_KEY])
-                    .await?;
-                let Some(row) = rows.next().await? else {
-                    return Ok(DEFAULT_VOLUME);
-                };
-                let value = row.get::<String>(0)?;
-                value.parse::<f64>().map_err(|err| {
-                    CollectionError::Database(turso::Error::ConversionFailure(format!(
-                        "invalid volume `{value}`: {err}"
-                    )))
-                })
-            })
-            .await
-    }
-
-    /// Persist volume clamped to `[0, 1]`.
-    pub(crate) async fn set_volume(&self, volume: f64) -> Result<(), CollectionError> {
-        let volume = volume.clamp(0.0, 1.0);
-        let value = volume.to_string();
-        self.db
-            .run(async move |conn| {
-                conn.execute(
-                    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    params![VOLUME_KEY, value.as_str()],
-                )
-                    .await?;
-                Ok(())
-            })
-            .await
-    }
-
-    /// Load persisted playback session; missing key is `None`.
+    /// Run `op` under async-compat Tokio context, retrying serialization failures.
     ///
-    /// Corrupt JSON is cleared and treated as no session (not silently defaulted).
-    pub(crate) async fn playback_session(
-        &self,
-    ) -> Result<Option<PlaybackSession>, CollectionError> {
-        self.db
-            .run(async move |conn| {
-                let mut rows = conn
-                    .query(
-                        "SELECT value FROM meta WHERE key = ?1",
-                        params![PLAYBACK_SESSION_KEY],
-                    )
-                    .await?;
-                let Some(row) = rows.next().await? else {
-                    return Ok(None);
-                };
-                let value = row.get::<String>(0)?;
-                match PlaybackSession::from_json(&value) {
-                    Ok(session) => Ok(Some(session)),
-                    Err(_) => {
-                        conn.execute(
-                            "DELETE FROM meta WHERE key = ?1",
-                            params![PLAYBACK_SESSION_KEY],
-                        )
-                        .await?;
-                        Ok(None)
+    /// Each attempt receives an owned [`Db`] clone so the future does not borrow
+    /// across the retry loop. `op` is an [`AsyncFnMut`] whose captures can be
+    /// reused on retry.
+    async fn run<T, F>(&self, mut op: F) -> Result<T, CollectionError>
+    where
+        F: AsyncFnMut(Db) -> Result<T, CollectionError>,
+    {
+        async {
+            for attempt in 0..MAX_SERIALIZATION_RETRIES {
+                match op(self.db.clone()).await {
+                    Ok(value) => return Ok(value),
+                    Err(err) if err.is_serialization_failure() => {
+                        warn!(
+                            %err,
+                            attempt,
+                            "catalog serialization failure; retrying"
+                        );
+                        Delay::new(SERIALIZATION_RETRY_DELAY).await;
                     }
+                    Err(err) => return Err(err),
                 }
-            })
-            .await
-    }
-
-    pub(crate) async fn set_playback_session(
-        &self,
-        session: &PlaybackSession,
-    ) -> Result<(), CollectionError> {
-        let value = session.to_json()?;
-        self.db
-            .run(async move |conn| {
-                conn.execute(
-                    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    params![PLAYBACK_SESSION_KEY, value.as_str()],
-                )
-                    .await?;
-                Ok(())
-            })
-            .await
-    }
-
-    pub(crate) async fn clear_playback_session(&self) -> Result<(), CollectionError> {
-        self.db
-            .run(async move |conn| {
-                conn.execute(
-                    "DELETE FROM meta WHERE key = ?1",
-                    params![PLAYBACK_SESSION_KEY],
-                )
-                .await?;
-                Ok(())
-            })
-            .await
+            }
+            op(self.db.clone()).await
+        }
+        .compat()
+        .await
     }
 
     #[cfg(test)]
@@ -808,15 +161,666 @@ impl CatalogStore {
     ) -> Result<(), CollectionError> {
         let key = key.to_owned();
         let value = value.to_owned();
-        self.db
-            .run(async move |conn| {
-                conn.execute(
-                    "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    params![key.as_str(), value.as_str()],
-                )
+        self.run(async move |mut db| {
+            let key = key.clone();
+            let value = value.clone();
+            Meta::upsert_by_key(key).value(value).exec(&mut db).await?;
+            Ok(())
+        })
+        .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn exec_raw_statement(&self, sql: &str) -> Result<(), CollectionError> {
+        let sql = sql.to_owned();
+        self.run(async move |mut db| {
+            let sql = sql.clone();
+            toasty::sql::statement(sql).exec(&mut db).await?;
+            Ok(())
+        })
+        .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn insert_song_raw(
+        &self,
+        path: &str,
+        duration_ms: i64,
+        year: Option<i64>,
+    ) -> Result<(), CollectionError> {
+        let path = path.to_owned();
+        self.run(async move |mut db| {
+            let path = path.clone();
+            let mut statement = toasty::sql::statement(
+                "INSERT INTO songs (path, duration_ms, year) VALUES (?1, ?2, ?3)",
+            )
+            .bind(path)
+            .bind(duration_ms);
+            statement = match year {
+                Some(year) => statement.bind(year),
+                None => statement.bind_typed(
+                    toasty::stmt::Value::Null,
+                    toasty::schema::db::Type::Integer(8),
+                ),
+            };
+            statement.exec(&mut db).await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn songs_by_ids(
+        executor: &mut dyn Executor,
+        song_ids: &[SongId],
+    ) -> Result<HashMap<SongId, Song>, CollectionError> {
+        let mut songs_by_id = HashMap::new();
+        if song_ids.is_empty() {
+            return Ok(songs_by_id);
+        }
+        for chunk in song_ids.chunks(IN_LIST_BATCH) {
+            let rows = Song::filter(Song::fields().id().in_list(chunk.to_vec()))
+                .exec(executor)
+                .await?;
+            for song in rows {
+                songs_by_id.insert(song.id, song);
+            }
+        }
+        Ok(songs_by_id)
+    }
+
+    fn playlist_row_from_model(row: Playlist) -> Result<PlaylistRow, CollectionError> {
+        let kind = match row.kind {
+            StoredPlaylistKind::Directory => match row.directory_path {
+                Some(path) => PlaylistKind::Directory { path },
+                None => return Err(CatalogDataError::DirectoryPlaylistMissingPath.into()),
+            },
+            StoredPlaylistKind::Virtual => PlaylistKind::Virtual,
+        };
+        Ok(PlaylistRow {
+            id: row.id as PlaylistId,
+            name: row.name,
+            kind,
+        })
+    }
+
+    fn song_row_from_model(row: &Song) -> Result<SongRow, CollectionError> {
+        Ok(SongRow {
+            id: row.id,
+            path: row.file_path.clone(),
+            duration_ms: Self::u64_from_i64(row.duration_ms, CatalogNumericField::DurationMs)?,
+            tags: SongTags {
+                title: row.title.clone(),
+                artist: row.artist.clone(),
+                album: row.album.clone(),
+                album_artist: row.album_artist.clone(),
+                composer: row.composer.clone(),
+                lyricist: row.lyricist.clone(),
+                performer: row.performer.clone(),
+                genre: row.genre.clone(),
+                comment: row.comment.clone(),
+                date: row.date.clone(),
+                year: Self::opt_u16_from_i64(row.year, CatalogNumericField::Year)?,
+                track_number: Self::opt_u64_from_i64(
+                    row.track_number,
+                    CatalogNumericField::TrackNumber,
+                )?,
+                track_total: Self::opt_u64_from_i64(
+                    row.track_total,
+                    CatalogNumericField::TrackTotal,
+                )?,
+                disc_number: Self::opt_u64_from_i64(
+                    row.disc_number,
+                    CatalogNumericField::DiscNumber,
+                )?,
+                disc_total: Self::opt_u64_from_i64(row.disc_total, CatalogNumericField::DiscTotal)?,
+                cover_mime: row.cover_mime.clone(),
+                cover_file_type: row.cover_file_type.map(Self::to_cover_file_type),
+            },
+        })
+    }
+
+    fn from_cover_file_type(file_type: CoverFileType) -> StoredCoverFileType {
+        match file_type {
+            CoverFileType::Jpg => StoredCoverFileType::Jpg,
+            CoverFileType::Png => StoredCoverFileType::Png,
+            CoverFileType::Webp => StoredCoverFileType::Webp,
+            CoverFileType::Gif => StoredCoverFileType::Gif,
+            CoverFileType::Bin => StoredCoverFileType::Bin,
+        }
+    }
+
+    fn to_cover_file_type(file_type: StoredCoverFileType) -> CoverFileType {
+        match file_type {
+            StoredCoverFileType::Jpg => CoverFileType::Jpg,
+            StoredCoverFileType::Png => CoverFileType::Png,
+            StoredCoverFileType::Webp => CoverFileType::Webp,
+            StoredCoverFileType::Gif => CoverFileType::Gif,
+            StoredCoverFileType::Bin => CoverFileType::Bin,
+        }
+    }
+
+    fn u64_from_i64(value: i64, field: CatalogNumericField) -> Result<u64, CollectionError> {
+        u64::try_from(value).map_err(|_| CatalogDataError::InvalidNumericField(field).into())
+    }
+
+    fn opt_u16_from_i64(
+        value: Option<i64>,
+        field: CatalogNumericField,
+    ) -> Result<Option<u16>, CollectionError> {
+        match value {
+            None => Ok(None),
+            Some(raw) => u16::try_from(raw)
+                .map(Some)
+                .map_err(|_| CatalogDataError::InvalidNumericField(field).into()),
+        }
+    }
+
+    fn opt_u64_from_i64(
+        value: Option<i64>,
+        field: CatalogNumericField,
+    ) -> Result<Option<u64>, CollectionError> {
+        match value {
+            None => Ok(None),
+            Some(raw) => u64::try_from(raw)
+                .map(Some)
+                .map_err(|_| CatalogDataError::InvalidNumericField(field).into()),
+        }
+    }
+}
+
+impl Catalog for CatalogStore {
+    async fn next_playlist_id(&self) -> Result<PlaylistId, CollectionError> {
+        self.run(async |mut db| {
+            let max = Playlist::all()
+                .order_by(Playlist::fields().id().desc())
+                .first()
+                .exec(&mut db)
+                .await?;
+            let max_id = max.map(|playlist| playlist.id as PlaylistId).unwrap_or(0);
+            Ok(max_id.saturating_add(1).max(1))
+        })
+        .await
+    }
+
+    async fn list_playlist_rows(&self) -> Result<Vec<PlaylistRow>, CollectionError> {
+        self.run(async |mut db| {
+            let rows = Playlist::all()
+                .order_by(Playlist::fields().id().asc())
+                .exec(&mut db)
+                .await?;
+            rows.into_iter()
+                .map(Self::playlist_row_from_model)
+                .collect()
+        })
+        .await
+    }
+
+    async fn playlist_row(&self, id: PlaylistId) -> Result<PlaylistRow, CollectionError> {
+        self.run(
+            async move |mut db| match Playlist::get_by_id(&mut db, id as i64).await {
+                Ok(row) => Self::playlist_row_from_model(row),
+                Err(err) if err.is_record_not_found() => Err(CollectionError::PlaylistNotFound),
+                Err(err) => Err(err.into()),
+            },
+        )
+        .await
+    }
+
+    async fn songs_for_playlist(
+        &self,
+        playlist_id: PlaylistId,
+    ) -> Result<Vec<SongRow>, CollectionError> {
+        self.run(async move |mut db| {
+            let mut tx = db.transaction().await?;
+            let memberships = PlaylistSong::filter_by_playlist_id(playlist_id as i64)
+                .order_by(PlaylistSong::fields().position().asc())
+                .exec(&mut tx)
+                .await?;
+            let song_ids = memberships
+                .iter()
+                .map(|membership| membership.song_id)
+                .collect::<Vec<_>>();
+            let songs_by_id = Self::songs_by_ids(&mut tx, &song_ids).await?;
+            let mut songs = Vec::with_capacity(memberships.len());
+            for membership in memberships {
+                let song_id = membership.song_id;
+                let Some(song) = songs_by_id.get(&song_id) else {
+                    error!(
+                        playlist_id,
+                        song_id, "playlist membership references missing song"
+                    );
+                    continue;
+                };
+                songs.push(Self::song_row_from_model(song)?);
+            }
+            tx.commit().await?;
+            Ok(songs)
+        })
+        .await
+    }
+
+    async fn song_rows_for_paths(&self, paths: &[String]) -> Result<Vec<SongRow>, CollectionError> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let paths = paths.to_vec();
+        self.run(async move |mut db| {
+            let paths = paths.clone();
+            let mut songs = Vec::new();
+            for chunk in paths.chunks(IN_LIST_BATCH) {
+                let rows = Song::filter(Song::fields().file_path().in_list(chunk.to_vec()))
+                    .exec(&mut db)
                     .await?;
-                Ok(())
+                for row in rows {
+                    songs.push(Self::song_row_from_model(&row)?);
+                }
+            }
+            Ok(songs)
+        })
+        .await
+    }
+
+    async fn insert_playlist(
+        &self,
+        id: PlaylistId,
+        name: &str,
+        kind: &PlaylistKind,
+    ) -> Result<(), CollectionError> {
+        let (stored_kind, directory_path) = match kind {
+            PlaylistKind::Directory { path } => (StoredPlaylistKind::Directory, Some(path.clone())),
+            PlaylistKind::Virtual => (StoredPlaylistKind::Virtual, None),
+        };
+        let name = name.to_owned();
+        self.run(async move |mut db| {
+            let name = name.clone();
+            let directory_path = directory_path.clone();
+            toasty::create!(Playlist {
+                id: id as i64,
+                name,
+                kind: stored_kind,
+                directory_path,
             })
-            .await
+            .exec(&mut db)
+            .await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn find_directory_playlist_id(
+        &self,
+        directory_path: &str,
+    ) -> Result<Option<PlaylistId>, CollectionError> {
+        let directory_path = directory_path.to_owned();
+        self.run(async move |mut db| {
+            let directory_path = directory_path.clone();
+            let row = Playlist::filter(
+                Playlist::fields()
+                    .kind()
+                    .eq(StoredPlaylistKind::Directory)
+                    .and(Playlist::fields().directory_path().eq(&directory_path)),
+            )
+            .first()
+            .exec(&mut db)
+            .await?;
+            Ok(row.map(|playlist| playlist.id as PlaylistId))
+        })
+        .await
+    }
+
+    async fn rename_playlist(&self, id: PlaylistId, name: &str) -> Result<(), CollectionError> {
+        let name = name.to_owned();
+        self.run(async move |mut db| {
+            let name = name.clone();
+            match Playlist::get_by_id(&mut db, id as i64).await {
+                Ok(mut playlist) => {
+                    playlist.update().name(name).exec(&mut db).await?;
+                    Ok(())
+                }
+                Err(err) if err.is_record_not_found() => Err(CollectionError::PlaylistNotFound),
+                Err(err) => Err(err.into()),
+            }
+        })
+        .await
+    }
+
+    async fn delete_playlist(&self, id: PlaylistId) -> Result<(), CollectionError> {
+        self.run(async move |mut db| {
+            let mut tx = db.transaction().await?;
+            PlaylistSong::filter_by_playlist_id(id as i64)
+                .delete()
+                .exec(&mut tx)
+                .await?;
+            match Playlist::get_by_id(&mut tx, id as i64).await {
+                Ok(playlist) => {
+                    playlist.delete().exec(&mut tx).await?;
+                }
+                Err(err) if err.is_record_not_found() => {
+                    return Err(CollectionError::PlaylistNotFound);
+                }
+                Err(err) => return Err(err.into()),
+            }
+            tx.commit().await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn upsert_song(
+        &self,
+        path: &str,
+        duration_ms: u64,
+        tags: &SongTags,
+    ) -> Result<SongId, CollectionError> {
+        let path = path.to_owned();
+        let tags = tags.clone();
+        self.run(async move |mut db| {
+            let path = path.clone();
+            let tags = tags.clone();
+            let song = Song::upsert_by_file_path(&path)
+                .duration_ms(duration_ms as i64)
+                .title(tags.title.clone())
+                .artist(tags.artist.clone())
+                .album(tags.album.clone())
+                .album_artist(tags.album_artist.clone())
+                .composer(tags.composer.clone())
+                .lyricist(tags.lyricist.clone())
+                .performer(tags.performer.clone())
+                .genre(tags.genre.clone())
+                .comment(tags.comment.clone())
+                .date(tags.date.clone())
+                .year(tags.year.map(i64::from))
+                .track_number(tags.track_number.map(|value| value as i64))
+                .track_total(tags.track_total.map(|value| value as i64))
+                .disc_number(tags.disc_number.map(|value| value as i64))
+                .disc_total(tags.disc_total.map(|value| value as i64))
+                .cover_mime(tags.cover_mime.clone())
+                .cover_file_type(tags.cover_file_type.map(Self::from_cover_file_type))
+                .exec(&mut db)
+                .await?;
+            Ok(song.id)
+        })
+        .await
+    }
+
+    async fn attach_song(
+        &self,
+        playlist_id: PlaylistId,
+        song_id: SongId,
+        position: i64,
+    ) -> Result<(), CollectionError> {
+        self.run(async move |mut db| {
+            PlaylistSong::upsert_by_playlist_id_and_song_id(playlist_id as i64, song_id)
+                .position(position)
+                .or_ignore()
+                .exec(&mut db)
+                .await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn replace_playlist_songs(
+        &self,
+        playlist_id: PlaylistId,
+        song_ids: &[SongId],
+    ) -> Result<(), CollectionError> {
+        let song_ids = song_ids.to_vec();
+        self.run(async move |mut db| {
+            let song_ids = song_ids.clone();
+            // DELETE then INSERT must be atomic so a mid-way failure cannot leave
+            // an empty playlist.
+            let mut tx = db.transaction().await?;
+            PlaylistSong::filter_by_playlist_id(playlist_id as i64)
+                .delete()
+                .exec(&mut tx)
+                .await?;
+            for (position, song_id) in song_ids.iter().copied().enumerate() {
+                PlaylistSong::create()
+                    .playlist_id(playlist_id as i64)
+                    .song_id(song_id)
+                    .position(position as i64)
+                    .exec(&mut tx)
+                    .await?;
+            }
+            tx.commit().await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn playlist_song_paths(
+        &self,
+        playlist_id: PlaylistId,
+    ) -> Result<Vec<String>, CollectionError> {
+        self.run(async move |mut db| {
+            let mut tx = db.transaction().await?;
+            let memberships = PlaylistSong::filter_by_playlist_id(playlist_id as i64)
+                .order_by(PlaylistSong::fields().position().asc())
+                .exec(&mut tx)
+                .await?;
+            let song_ids = memberships
+                .iter()
+                .map(|membership| membership.song_id)
+                .collect::<Vec<_>>();
+            let songs_by_id = Self::songs_by_ids(&mut tx, &song_ids).await?;
+            let mut paths = Vec::with_capacity(memberships.len());
+            for membership in memberships {
+                let song_id = membership.song_id;
+                let Some(song) = songs_by_id.get(&song_id) else {
+                    error!(
+                        playlist_id,
+                        song_id, "playlist membership references missing song"
+                    );
+                    continue;
+                };
+                paths.push(song.file_path.clone());
+            }
+            tx.commit().await?;
+            Ok(paths)
+        })
+        .await
+    }
+
+    async fn garbage_collect_orphan_songs(
+        &self,
+    ) -> Result<Vec<(SongId, Option<CoverFileType>)>, CollectionError> {
+        self.run(async |mut db| {
+            // Avoid relation-subquery filters: they can kill the Turso connection
+            // task under async-compat (RecvError). Diff memberships in Rust instead.
+            // All deletes commit together so a mid-way failure cannot orphan covers
+            // that Collection would never learn about.
+            let mut tx = db.transaction().await?;
+            let songs = Song::all().exec(&mut tx).await?;
+            let memberships = PlaylistSong::all().exec(&mut tx).await?;
+            let referenced = memberships
+                .into_iter()
+                .map(|membership| membership.song_id)
+                .collect::<HashSet<_>>();
+            let mut removed = Vec::new();
+            for song in songs {
+                if referenced.contains(&song.id) {
+                    continue;
+                }
+                let cover_file_type = song.cover_file_type.map(Self::to_cover_file_type);
+                let song_id = song.id;
+                song.delete().exec(&mut tx).await?;
+                removed.push((song_id, cover_file_type));
+            }
+            tx.commit().await?;
+            Ok(removed)
+        })
+        .await
+    }
+
+    async fn max_position(&self, playlist_id: PlaylistId) -> Result<i64, CollectionError> {
+        self.run(async move |mut db| {
+            let max = PlaylistSong::filter_by_playlist_id(playlist_id as i64)
+                .order_by(PlaylistSong::fields().position().desc())
+                .first()
+                .exec(&mut db)
+                .await?;
+            Ok(max.map(|membership| membership.position).unwrap_or(-1))
+        })
+        .await
+    }
+
+    async fn playback_mode(&self) -> Result<StoredPlaybackMode, CollectionError> {
+        self.run(
+            async |mut db| match Meta::get_by_key(&mut db, PLAYBACK_MODE_KEY).await {
+                Ok(meta) => StoredPlaybackMode::parse(&meta.value)
+                    .ok_or(CatalogDataError::UnknownPlaybackMode.into()),
+                Err(err) if err.is_record_not_found() => Ok(StoredPlaybackMode::Sequential),
+                Err(err) => Err(err.into()),
+            },
+        )
+        .await
+    }
+
+    async fn set_playback_mode(&self, mode: StoredPlaybackMode) -> Result<(), CollectionError> {
+        self.run(async move |mut db| {
+            Meta::upsert_by_key(PLAYBACK_MODE_KEY)
+                .value(mode.as_str())
+                .exec(&mut db)
+                .await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn volume(&self) -> Result<f64, CollectionError> {
+        self.run(
+            async |mut db| match Meta::get_by_key(&mut db, VOLUME_KEY).await {
+                Ok(meta) => meta
+                    .value
+                    .parse::<f64>()
+                    .map_err(|_| CatalogDataError::InvalidVolume.into()),
+                Err(err) if err.is_record_not_found() => Ok(DEFAULT_VOLUME),
+                Err(err) => Err(err.into()),
+            },
+        )
+        .await
+    }
+
+    async fn set_volume(&self, volume: f64) -> Result<(), CollectionError> {
+        let volume = volume.clamp(0.0, 1.0);
+        let value = volume.to_string();
+        self.run(async move |mut db| {
+            let value = value.clone();
+            Meta::upsert_by_key(VOLUME_KEY)
+                .value(value)
+                .exec(&mut db)
+                .await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn playback_session(&self) -> Result<Option<PlaybackSession>, CollectionError> {
+        self.run(
+            async |mut db| match Meta::get_by_key(&mut db, PLAYBACK_SESSION_KEY).await {
+                Ok(meta) => match PlaybackSession::from_json(&meta.value) {
+                    Ok(session) => Ok(Some(session)),
+                    Err(_) => {
+                        meta.delete().exec(&mut db).await?;
+                        Ok(None)
+                    }
+                },
+                Err(err) if err.is_record_not_found() => Ok(None),
+                Err(err) => Err(err.into()),
+            },
+        )
+        .await
+    }
+
+    async fn set_playback_session(&self, session: &PlaybackSession) -> Result<(), CollectionError> {
+        let value = session.to_json()?;
+        self.run(async move |mut db| {
+            let value = value.clone();
+            Meta::upsert_by_key(PLAYBACK_SESSION_KEY)
+                .value(value)
+                .exec(&mut db)
+                .await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn clear_playback_session(&self) -> Result<(), CollectionError> {
+        self.run(
+            async |mut db| match Meta::get_by_key(&mut db, PLAYBACK_SESSION_KEY).await {
+                Ok(meta) => {
+                    meta.delete().exec(&mut db).await?;
+                    Ok(())
+                }
+                Err(err) if err.is_record_not_found() => Ok(()),
+                Err(err) => Err(err.into()),
+            },
+        )
+        .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Mirrors [`CatalogStore::run`]'s retry loop without a live [`Db`].
+    async fn with_serialization_retries<T, F>(mut op: F) -> Result<T, CollectionError>
+    where
+        F: AsyncFnMut() -> Result<T, CollectionError>,
+    {
+        for _attempt in 0..MAX_SERIALIZATION_RETRIES {
+            match op().await {
+                Ok(value) => return Ok(value),
+                Err(err) if err.is_serialization_failure() => {
+                    Delay::new(SERIALIZATION_RETRY_DELAY).await;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        op().await
+    }
+
+    #[test]
+    fn serialization_retries_until_success() {
+        futures_executor::block_on(async {
+            let mut attempts = 0_usize;
+            let result = with_serialization_retries(async || {
+                attempts += 1;
+                if attempts < 3 {
+                    Err(CollectionError::Database(
+                        toasty::Error::serialization_failure("test conflict"),
+                    ))
+                } else {
+                    Ok(7_i32)
+                }
+            })
+            .await;
+            assert_eq!(result.expect("eventually ok"), 7);
+            assert_eq!(attempts, 3);
+        });
+    }
+
+    #[test]
+    fn serialization_retries_exhaust_and_return_error() {
+        futures_executor::block_on(async {
+            let mut attempts = 0_usize;
+            let result = with_serialization_retries(async || {
+                attempts += 1;
+                Err::<(), _>(CollectionError::Database(
+                    toasty::Error::serialization_failure("still conflict"),
+                ))
+            })
+            .await;
+            assert!(
+                result
+                    .expect_err("retries exhausted")
+                    .is_serialization_failure(),
+                "final error should still be serialization failure"
+            );
+            // MAX_SERIALIZATION_RETRIES loop attempts + one final attempt.
+            assert_eq!(attempts, MAX_SERIALIZATION_RETRIES + 1);
+        });
     }
 }

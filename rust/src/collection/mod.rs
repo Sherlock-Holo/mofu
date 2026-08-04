@@ -17,7 +17,7 @@ pub(crate) use model::StoredPlaybackMode;
 pub use model::{PlaybackSession, Playlist, PlaylistId, PlaylistKind, Song};
 use model::{SongId, SongRow, SongTags};
 use scan::CollectionScanner;
-use store::CatalogStore;
+use store::{Catalog, CatalogStore};
 
 use crate::player::metadata::{CoverArt, TrackMetadata};
 use crate::player::{MediaInspector, SymphoniaMediaInspector};
@@ -29,13 +29,13 @@ const COVERS_DIR_NAME: &str = "covers";
 ///
 /// Lyrics are not stored in the collection DB; playback loads them from the media
 /// file / sidecar at decode time. Any leftover `lyrics.db` on disk is unused.
-pub(crate) struct Collection {
-    catalog: CatalogStore,
+pub(crate) struct Collection<C: Catalog = CatalogStore> {
+    catalog: C,
     covers: CoverStore,
     inspector: Box<dyn MediaInspector>,
 }
 
-impl Collection {
+impl Collection<CatalogStore> {
     /// Open the collection using platform data + cache directories.
     pub(crate) async fn open_default() -> Result<Self, CollectionError> {
         let dirs = ProjectDirs::from("dev", "mofu", "mofu")
@@ -77,7 +77,9 @@ impl Collection {
             inspector,
         })
     }
+}
 
+impl<C: Catalog> Collection<C> {
     pub(crate) async fn playlists(&self) -> Result<Vec<Playlist>, CollectionError> {
         let rows = self.catalog.list_playlist_rows().await?;
         let mut playlists = Vec::with_capacity(rows.len());
@@ -282,10 +284,10 @@ impl Collection {
         let rows = self.catalog.song_rows_for_paths(&paths).await?;
         let mut covers = Vec::new();
         for row in rows {
-            let Some(ext) = row.tags.cover_ext else {
+            let Some(file_type) = row.tags.cover_file_type else {
                 continue;
             };
-            let Some(cover) = self.covers.read(row.id, ext, row.tags.cover_mime) else {
+            let Some(cover) = self.covers.read(row.id, file_type, row.tags.cover_mime) else {
                 continue;
             };
             covers.push((row.path, cover));
@@ -346,13 +348,13 @@ impl Collection {
             .catalog
             .upsert_song(&song.path, song.duration_ms, &tags)
             .await?;
-        let cover_ext = if let Some(cover) = song.metadata.cover.as_ref() {
+        let cover_file_type = if let Some(cover) = song.metadata.cover.as_ref() {
             Some(self.covers.write(song_id, cover)?)
         } else {
             self.covers.remove_all(song_id);
             None
         };
-        let tags = SongTags::from_metadata(&song.metadata, cover_ext);
+        let tags = SongTags::from_metadata(&song.metadata, cover_file_type);
         self.catalog
             .upsert_song(&song.path, song.duration_ms, &tags)
             .await
@@ -360,9 +362,9 @@ impl Collection {
 
     async fn garbage_collect(&self) -> Result<(), CollectionError> {
         let orphans = self.catalog.garbage_collect_orphan_songs().await?;
-        for (song_id, cover_ext) in orphans {
-            if let Some(ext) = cover_ext {
-                self.covers.remove(song_id, ext);
+        for (song_id, cover_file_type) in orphans {
+            if let Some(file_type) = cover_file_type {
+                self.covers.remove(song_id, file_type);
             } else {
                 self.covers.remove_all(song_id);
             }
@@ -420,7 +422,7 @@ impl Collection {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::store::CatalogStore;
+    use super::store::{Catalog, CatalogStore};
     use super::*;
     use crate::player::{MediaInspection, PlayerError};
 
@@ -730,6 +732,140 @@ mod tests {
                 collection.playback_session().await.expect("stays cleared"),
                 None
             );
+        });
+    }
+
+    #[test]
+    fn open_creates_schema_when_db_file_exists_without_tables() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let path = dirs.data.join(CATALOG_FILE_NAME);
+            fs::write(&path, []).expect("create empty db file");
+            let catalog = CatalogStore::open(&path)
+                .await
+                .expect("open empty existing file");
+            catalog
+                .set_volume(0.5)
+                .await
+                .expect("write after schema bootstrap");
+            let reopened = CatalogStore::open(&path).await.expect("reopen");
+            assert_eq!(reopened.volume().await.expect("volume"), 0.5);
+        });
+    }
+
+    #[test]
+    fn open_recreates_missing_tables_after_partial_schema() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let path = dirs.data.join(CATALOG_FILE_NAME);
+            {
+                let catalog = CatalogStore::open(&path).await.expect("bootstrap");
+                catalog
+                    .set_volume(0.25)
+                    .await
+                    .expect("seed volume via meta");
+                catalog
+                    .exec_raw_statement("DROP TABLE songs")
+                    .await
+                    .expect("drop songs to simulate partial schema");
+            }
+            let catalog = CatalogStore::open(&path)
+                .await
+                .expect("reopen repairs missing songs table");
+            assert_eq!(catalog.volume().await.expect("meta intact"), 0.25);
+            catalog
+                .upsert_song("/tmp/repaired.mp3", 1, &SongTags::default())
+                .await
+                .expect("songs table usable after repair");
+        });
+    }
+
+    #[test]
+    fn invalid_numeric_fields_are_rejected() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
+                .await
+                .expect("open catalog");
+            catalog
+                .insert_song_raw("/tmp/bad-year.mp3", 1, Some(-1))
+                .await
+                .expect("plant negative year");
+            let err = catalog
+                .song_rows_for_paths(&["/tmp/bad-year.mp3".to_owned()])
+                .await
+                .expect_err("negative year must fail");
+            assert!(matches!(
+                err,
+                CollectionError::InvalidData(super::error::CatalogDataError::InvalidNumericField(
+                    super::error::CatalogNumericField::Year
+                ))
+            ));
+
+            catalog
+                .insert_song_raw("/tmp/bad-duration.mp3", -5, None)
+                .await
+                .expect("plant negative duration");
+            let err = catalog
+                .song_rows_for_paths(&["/tmp/bad-duration.mp3".to_owned()])
+                .await
+                .expect_err("negative duration must fail");
+            assert!(matches!(
+                err,
+                CollectionError::InvalidData(super::error::CatalogDataError::InvalidNumericField(
+                    super::error::CatalogNumericField::DurationMs
+                ))
+            ));
+        });
+    }
+
+    #[test]
+    fn garbage_collect_removes_orphan_songs_and_covers() {
+        futures_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let collection = open_test_collection(&dirs).await;
+            let playlist = collection
+                .create_virtual("temp".into())
+                .await
+                .expect("create playlist");
+            let audio = dirs.data.join("orphan.mp3");
+            fs::write(&audio, b"fake").expect("write audio stub");
+            collection
+                .add_files(playlist.id, vec![audio.clone()])
+                .await
+                .expect("add file");
+
+            let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
+                .await
+                .expect("open catalog");
+            let rows = catalog
+                .song_rows_for_paths(&[audio.to_string_lossy().into_owned()])
+                .await
+                .expect("lookup song");
+            let song = rows.into_iter().next().expect("song row");
+            let cover_path = dirs.cache.join(format!("{}.jpg", song.id));
+            fs::write(&cover_path, b"cover").expect("plant cover file");
+            catalog
+                .exec_raw_statement(&format!(
+                    "UPDATE songs SET cover_ext = '.jpg' WHERE id = {}",
+                    song.id
+                ))
+                .await
+                .expect("mark cover ext");
+
+            collection
+                .delete_virtual(playlist.id)
+                .await
+                .expect("delete playlist triggers GC");
+            assert!(
+                !cover_path.exists(),
+                "orphan cover file should be removed after GC"
+            );
+            let leftover = catalog
+                .song_rows_for_paths(&[audio.to_string_lossy().into_owned()])
+                .await
+                .expect("lookup after GC");
+            assert!(leftover.is_empty(), "orphan song row should be deleted");
         });
     }
 }

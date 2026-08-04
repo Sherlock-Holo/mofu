@@ -4,10 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::error::CollectionError;
-use super::model::{CoverExt, SongId};
+use super::model::{CoverFileType, SongId};
 use crate::player::metadata::CoverArt;
 
-/// Reads and writes cover files as `{song_id}{ext}` under a cache root.
+/// Reads and writes cover files as `{song_id}{suffix}` under a cache root.
 pub(crate) struct CoverStore {
     root: PathBuf,
 }
@@ -18,29 +18,29 @@ impl CoverStore {
         Ok(Self { root })
     }
 
-    /// Persist cover bytes; returns the extension used on disk.
+    /// Persist cover bytes; returns the file type used on disk.
     pub(crate) fn write(
         &self,
         song_id: SongId,
         cover: &CoverArt,
-    ) -> Result<CoverExt, CollectionError> {
-        let ext = CoverExt::from_mime(cover.mime_type.as_deref());
-        let path = self.path_for(song_id, ext);
-        // Drop previous extension variants before writing the new temp file.
+    ) -> Result<CoverFileType, CollectionError> {
+        let file_type = CoverFileType::from_mime(cover.mime_type.as_deref());
+        let path = self.path_for(song_id, file_type);
+        // Drop previous file-type variants before writing the new temp file.
         Self::remove_all_for_id(&self.root, song_id);
         let temporary = self.root.join(format!("{song_id}.tmp"));
         fs::write(&temporary, &cover.data)?;
         fs::rename(&temporary, &path)?;
-        Ok(ext)
+        Ok(file_type)
     }
 
     pub(crate) fn read(
         &self,
         song_id: SongId,
-        ext: CoverExt,
+        file_type: CoverFileType,
         mime_type: Option<String>,
     ) -> Option<CoverArt> {
-        let path = self.path_for(song_id, ext);
+        let path = self.path_for(song_id, file_type);
         let data = fs::read(path).ok()?;
         if data.is_empty() {
             return None;
@@ -48,8 +48,8 @@ impl CoverStore {
         Some(CoverArt { mime_type, data })
     }
 
-    pub(crate) fn remove(&self, song_id: SongId, ext: CoverExt) {
-        let path = self.path_for(song_id, ext);
+    pub(crate) fn remove(&self, song_id: SongId, file_type: CoverFileType) {
+        let path = self.path_for(song_id, file_type);
         let _ = fs::remove_file(path);
     }
 
@@ -57,13 +57,13 @@ impl CoverStore {
         Self::remove_all_for_id(&self.root, song_id);
     }
 
-    fn path_for(&self, song_id: SongId, ext: CoverExt) -> PathBuf {
-        self.root.join(format!("{song_id}{}", ext.as_str()))
+    fn path_for(&self, song_id: SongId, file_type: CoverFileType) -> PathBuf {
+        self.root.join(format!("{song_id}{}", file_type.as_str()))
     }
 
     fn remove_all_for_id(root: &Path, song_id: SongId) {
-        for ext in CoverExt::ALL {
-            let _ = fs::remove_file(root.join(format!("{song_id}{}", ext.as_str())));
+        for file_type in CoverFileType::ALL {
+            let _ = fs::remove_file(root.join(format!("{song_id}{}", file_type.as_str())));
         }
         let _ = fs::remove_file(root.join(format!("{song_id}.tmp")));
     }
