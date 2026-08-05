@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:mofu/app/theme.dart';
+import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/features/home/widgets/current_track_header.dart';
 import 'package:mofu/features/home/widgets/playlist_sidebar.dart';
 import 'package:mofu/features/home/widgets/song_table.dart';
-import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
 import 'package:mofu/widgets/playback_bar.dart';
 import 'package:provider/provider.dart';
+import 'package:yaru/yaru.dart';
 
 /// 首页：侧栏播放列表 + 浏览列表摘要 + 曲目表 + 底栏。
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   static const _sidebarBreakpoint = 880.0;
+  static const _sidebarWidth = 220.0;
 
   @override
   Widget build(BuildContext context) {
@@ -23,32 +25,46 @@ class HomePage extends StatelessWidget {
     );
     final wide = MediaQuery.sizeOf(context).width >= _sidebarBreakpoint;
 
-    final body = Row(
+    final page = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (wide)
-          const SizedBox(
-            width: 220,
-            child: PlaylistSidebar(),
+        if (collection.error != null || playerError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: YaruInfoBox(
+              yaruInfoType: YaruInfoType.danger,
+              color: StrawberryCream.strawberry,
+              title: const Text('出错了'),
+              subtitle: Text(
+                collection.error ?? playerError!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: TextButton(
+                onPressed: () {
+                  // 错误在下次成功操作时清除；这里触发一次刷新。
+                  collection.load();
+                },
+                child: const Text('重试'),
+              ),
+            ),
           ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (collection.error != null || playerError != null)
-                _ErrorBanner(
-                  message: collection.error ?? playerError!,
-                  onDismiss: () {
-                    // 错误在下次成功操作时清除；这里触发一次刷新。
-                    collection.load();
-                  },
-                ),
-              const CurrentTrackHeader(),
-              const Expanded(child: SongTable()),
-            ],
-          ),
-        ),
+        const CurrentTrackHeader(),
+        const Expanded(child: SongTable()),
       ],
     );
+
+    final body = wide
+        ? YaruPanedView(
+            pane: const PlaylistSidebar(),
+            page: page,
+            layoutDelegate: const YaruResizablePaneDelegate(
+              initialPaneSize: _sidebarWidth,
+              minPaneSize: 180,
+              minPageSize: 360,
+            ),
+          )
+        : page;
 
     return Scaffold(
       appBar: wide
@@ -56,15 +72,18 @@ class HomePage extends StatelessWidget {
           : AppBar(
               title: const Text('Mofu'),
               actions: [
-                IconButton(
+                YaruIconButton(
                   tooltip: '打开音乐目录',
-                  onPressed:
-                      collection.loading ? null : collection.pickAndAddDirectory,
+                  onPressed: collection.loading
+                      ? null
+                      : collection.pickAndAddDirectory,
                   icon: const Icon(Icons.folder_open_rounded),
                 ),
-                IconButton(
+                YaruIconButton(
                   tooltip: '添加音乐文件',
-                  onPressed: collection.loading ? null : collection.pickAndAddFiles,
+                  onPressed: collection.loading
+                      ? null
+                      : collection.pickAndAddFiles,
                   icon: const Icon(Icons.library_add_rounded),
                 ),
               ],
@@ -77,42 +96,6 @@ class HomePage extends StatelessWidget {
             ),
       body: body,
       bottomNavigationBar: const PlaybackBar(),
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({
-    required this.message,
-    required this.onDismiss,
-  });
-
-  final String message;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: StrawberryCream.strawberry.withValues(alpha: 0.14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.error_outline_rounded,
-                color: StrawberryCream.strawberry),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: StrawberryCream.wine),
-              ),
-            ),
-            TextButton(onPressed: onDismiss, child: const Text('重试')),
-          ],
-        ),
-      ),
     );
   }
 }

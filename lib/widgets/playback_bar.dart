@@ -7,6 +7,7 @@ import 'package:mofu/widgets/cover_view.dart';
 import 'package:mofu/widgets/duration_format.dart';
 import 'package:mofu/widgets/playback_mode_button.dart';
 import 'package:provider/provider.dart';
+import 'package:yaru/yaru.dart';
 
 /// 底部播放控制条：进度、跳转、音量与模式。
 class PlaybackBar extends StatelessWidget {
@@ -27,8 +28,9 @@ class PlaybackBar extends StatelessWidget {
     final title = meta?.title?.trim().isNotEmpty == true
         ? meta!.title!
         : _fallbackTitle(snapshot);
-    final artist =
-        meta?.artist?.trim().isNotEmpty == true ? meta!.artist! : '未知歌手';
+    final artist = meta?.artist?.trim().isNotEmpty == true
+        ? meta!.artist!
+        : '未知歌手';
 
     return Material(
       color: StrawberryCream.card,
@@ -71,8 +73,8 @@ class PlaybackBar extends StatelessWidget {
                             ),
                             onTap:
                                 meta == null && snapshot?.currentIndex == null
-                                    ? null
-                                    : () => context.go('/now-playing'),
+                                ? null
+                                : () => context.go('/now-playing'),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -90,17 +92,17 @@ class PlaybackBar extends StatelessWidget {
                                         title,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
                                       ),
                                       Text(
                                         artist,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
                                       ),
                                     ],
                                   ),
@@ -114,12 +116,12 @@ class PlaybackBar extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
+                    YaruIconButton(
                       tooltip: '上一首',
                       onPressed: player.previous,
                       icon: const Icon(Icons.skip_previous_rounded),
                     ),
-                    IconButton(
+                    YaruIconButton(
                       tooltip: '后退 10 秒',
                       onPressed: () => player.seekRelative(-10000),
                       icon: const Icon(Icons.replay_10_rounded),
@@ -128,12 +130,12 @@ class PlaybackBar extends StatelessWidget {
                       playing: player.isPlaying,
                       onPressed: player.togglePlayPause,
                     ),
-                    IconButton(
+                    YaruIconButton(
                       tooltip: '前进 10 秒',
                       onPressed: () => player.seekRelative(10000),
                       icon: const Icon(Icons.forward_10_rounded),
                     ),
-                    IconButton(
+                    YaruIconButton(
                       tooltip: '下一首',
                       onPressed: player.next,
                       icon: const Icon(Icons.skip_next_rounded),
@@ -211,8 +213,10 @@ class _ProgressSliderState extends State<_ProgressSlider> {
   Widget build(BuildContext context) {
     final player = widget.player;
     final position = player.positionMs.toInt().toDouble();
-    final duration =
-        player.durationMs.toInt().toDouble().clamp(1, double.infinity);
+    final duration = player.durationMs.toInt().toDouble().clamp(
+      1,
+      double.infinity,
+    );
     final live = (position / duration).clamp(0.0, 1.0);
     final progress = _scrubbing ?? (live.isFinite ? live : 0.0);
     final displayMs = BigInt.from((progress * duration).round());
@@ -221,9 +225,9 @@ class _ProgressSliderState extends State<_ProgressSlider> {
       children: [
         Text(
           DurationFormat.fromMs(displayMs),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: StrawberryCream.wineMuted,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: StrawberryCream.wineMuted),
         ),
         Expanded(
           child: Slider(
@@ -238,9 +242,9 @@ class _ProgressSliderState extends State<_ProgressSlider> {
         ),
         Text(
           DurationFormat.fromMs(player.durationMs),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: StrawberryCream.wineMuted,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: StrawberryCream.wineMuted),
         ),
       ],
     );
@@ -248,10 +252,7 @@ class _ProgressSliderState extends State<_ProgressSlider> {
 }
 
 class _CompactVolumeButton extends StatelessWidget {
-  const _CompactVolumeButton({
-    required this.volume,
-    required this.onChanged,
-  });
+  const _CompactVolumeButton({required this.volume, required this.onChanged});
 
   final double volume;
   final ValueChanged<double> onChanged;
@@ -261,13 +262,10 @@ class _CompactVolumeButton extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
+        YaruIconButton(
           tooltip: '音量',
           onPressed: () => _showVolumeSheet(context),
-          icon: _VolumeIcon(
-            volume: volume,
-            color: StrawberryCream.wine,
-          ),
+          icon: _VolumeIcon(volume: volume, color: StrawberryCream.wine),
         ),
         _VolumeLabel(volume: volume),
       ],
@@ -310,11 +308,7 @@ class _CompactVolumeButton extends StatelessWidget {
 }
 
 class _VolumeIcon extends StatelessWidget {
-  const _VolumeIcon({
-    required this.volume,
-    this.size,
-    this.color,
-  });
+  const _VolumeIcon({required this.volume, this.size, this.color});
 
   final double volume;
   final double? size;
@@ -356,10 +350,7 @@ class _VolumeLabel extends StatelessWidget {
 }
 
 class _PlayPauseButton extends StatelessWidget {
-  const _PlayPauseButton({
-    required this.playing,
-    required this.onPressed,
-  });
+  const _PlayPauseButton({required this.playing, required this.onPressed});
 
   final bool playing;
   final VoidCallback onPressed;

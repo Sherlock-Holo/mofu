@@ -3,6 +3,7 @@ import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/src/rust/api/collection.dart';
 import 'package:provider/provider.dart';
+import 'package:yaru/yaru.dart';
 
 /// 左侧播放列表侧栏：目录列表与虚拟列表。
 class PlaylistSidebar extends StatelessWidget {
@@ -12,15 +13,8 @@ class PlaylistSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final collection = context.watch<CollectionController>();
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          right: BorderSide(
-            color: StrawberryCream.strawberry.withValues(alpha: 0.12),
-          ),
-        ),
-      ),
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -32,36 +26,33 @@ class PlaylistSidebar extends StatelessWidget {
                   child: Wrap(
                     spacing: 4,
                     children: [
-                      IconButton(
+                      YaruIconButton(
                         tooltip: '打开音乐目录',
                         onPressed: collection.loading
                             ? null
                             : collection.pickAndAddDirectory,
-                        icon:
-                            const Icon(Icons.folder_open_rounded, size: 20),
+                        icon: const Icon(Icons.folder_open_rounded),
                       ),
-                      IconButton(
+                      YaruIconButton(
                         tooltip: '添加音乐文件',
                         onPressed: collection.loading
                             ? null
                             : collection.pickAndAddFiles,
-                        icon:
-                            const Icon(Icons.library_add_rounded, size: 20),
+                        icon: const Icon(Icons.library_add_rounded),
                       ),
-                      IconButton(
+                      YaruIconButton(
                         tooltip: '新建虚拟列表',
                         onPressed: collection.loading
                             ? null
                             : () => _promptCreateVirtual(context),
-                        icon:
-                            const Icon(Icons.playlist_add_rounded, size: 20),
+                        icon: const Icon(Icons.playlist_add_rounded),
                       ),
-                      IconButton(
+                      YaruIconButton(
                         tooltip: '刷新当前列表',
                         onPressed: collection.loading
                             ? null
                             : collection.refreshSelected,
-                        icon: const Icon(Icons.refresh_rounded, size: 20),
+                        icon: const Icon(Icons.refresh_rounded),
                       ),
                     ],
                   ),
@@ -69,10 +60,11 @@ class PlaylistSidebar extends StatelessWidget {
                 if (collection.loading)
                   const Padding(
                     padding: EdgeInsets.only(right: 8),
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                    child: SizedBox.square(
+                      dimension: 18,
+                      child: FittedBox(
+                        child: YaruCircularProgressIndicator(strokeWidth: 2),
+                      ),
                     ),
                   ),
               ],
@@ -81,7 +73,7 @@ class PlaylistSidebar extends StatelessWidget {
           const SizedBox(height: 4),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
               children: [
                 const _SectionLabel(label: '目录'),
                 if (collection.directoryPlaylists.isEmpty)
@@ -127,13 +119,14 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: StrawberryCream.wineMuted,
-              letterSpacing: 0.4,
-            ),
+          color: StrawberryCream.wineMuted,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.4,
+        ),
       ),
     );
   }
@@ -147,22 +140,19 @@ class _EmptyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: StrawberryCream.wineMuted,
-            ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: StrawberryCream.wineMuted),
       ),
     );
   }
 }
 
 class _PlaylistTile extends StatelessWidget {
-  const _PlaylistTile({
-    required this.playlist,
-    this.virtual = false,
-  });
+  const _PlaylistTile({required this.playlist, this.virtual = false});
 
   final Playlist playlist;
   final bool virtual;
@@ -172,34 +162,24 @@ class _PlaylistTile extends StatelessWidget {
     final collection = context.watch<CollectionController>();
     final selected = collection.selectedId == playlist.id;
 
-    return Material(
+    return GestureDetector(
       key: ValueKey(playlist.id),
-      color: Colors.transparent,
-      child: ListTile(
-        dense: true,
+      onLongPress: virtual
+          ? () => _showVirtualActions(context, playlist)
+          : () => collection.refresh(playlist.id),
+      child: YaruMasterTile(
         selected: selected,
-        selectedTileColor: StrawberryCream.strawberry.withValues(alpha: 0.12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(StrawberryCream.radiusSm),
-        ),
         leading: Icon(
           virtual ? Icons.queue_music_rounded : Icons.folder_rounded,
           size: 20,
         ),
-        title: Text(
-          playlist.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text(playlist.name),
         subtitle: Text('${playlist.songs.length} 首'),
         onTap: () => collection.selectPlaylist(playlist.id),
-        onLongPress: virtual
-            ? () => _showVirtualActions(context, playlist)
-            : () => collection.refresh(playlist.id),
         trailing: virtual
-            ? IconButton(
+            ? YaruIconButton(
                 tooltip: '更多',
-                icon: const Icon(Icons.more_horiz_rounded, size: 18),
+                icon: const Icon(Icons.more_horiz_rounded),
                 onPressed: () => _showVirtualActions(context, playlist),
               )
             : null,
@@ -219,17 +199,17 @@ class _PlaylistTile extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
+            YaruMasterTile(
               leading: const Icon(Icons.drive_file_rename_outline_rounded),
               title: const Text('重命名'),
               onTap: () => Navigator.pop(context, 'rename'),
             ),
-            ListTile(
+            YaruMasterTile(
               leading: const Icon(Icons.playlist_add_check_rounded),
               title: const Text('从其他列表导入'),
               onTap: () => Navigator.pop(context, 'import'),
             ),
-            ListTile(
+            YaruMasterTile(
               leading: const Icon(Icons.delete_outline_rounded),
               title: const Text('删除'),
               onTap: () => Navigator.pop(context, 'delete'),
@@ -259,7 +239,13 @@ class _PlaylistTile extends StatelessWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('删除虚拟列表'),
+          titlePadding: EdgeInsets.zero,
+          title: const YaruDialogTitleBar(
+            title: Text('删除虚拟列表'),
+            isDraggable: false,
+            onDrag: null,
+            onShowMenu: null,
+          ),
           content: Text('确定删除「${playlist.name}」？'),
           actions: [
             TextButton(
@@ -288,16 +274,22 @@ class _PlaylistTile extends StatelessWidget {
         .where((playlist) => playlist.id != target.id)
         .toList();
     if (sources.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有可导入的其他列表')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有可导入的其他列表')));
       return;
     }
 
     final sourceId = await showDialog<BigInt>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('从其他列表导入'),
+        titlePadding: EdgeInsets.zero,
+        title: const YaruDialogTitleBar(
+          title: Text('从其他列表导入'),
+          isDraggable: false,
+          onDrag: null,
+          onShowMenu: null,
+        ),
         children: [
           for (final source in sources)
             SimpleDialogOption(
@@ -323,7 +315,7 @@ Future<String?> _promptText(
   required String hint,
   required String confirmLabel,
   String? initial,
-    }) {
+}) {
   return showDialog<String>(
     context: context,
     builder: (context) => _PromptTextDialog(
@@ -372,7 +364,13 @@ class _PromptTextDialogState extends State<_PromptTextDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.title),
+      titlePadding: EdgeInsets.zero,
+      title: YaruDialogTitleBar(
+        title: Text(widget.title),
+        isDraggable: false,
+        onDrag: null,
+        onShowMenu: null,
+      ),
       content: TextField(
         controller: _controller,
         autofocus: true,

@@ -45,6 +45,12 @@ abstract final class StrawberryCream {
         margin: EdgeInsets.zero,
         shadowColor: strawberry.withValues(alpha: 0.18),
       ),
+      listTileTheme: yaru.listTileTheme.copyWith(
+        selectedTileColor: strawberryMist,
+        selectedColor: strawberry,
+        iconColor: wineMuted,
+        textColor: wine,
+      ),
       snackBarTheme: yaru.snackBarTheme.copyWith(
         backgroundColor: wine,
         contentTextStyle: const TextStyle(color: cream),

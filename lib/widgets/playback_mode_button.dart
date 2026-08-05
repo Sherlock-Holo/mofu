@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/src/rust/api/player.dart';
+import 'package:yaru/yaru.dart';
 
 /// 四种播放模式循环切换按钮。
 class PlaybackModeButton extends StatelessWidget {
@@ -21,47 +22,37 @@ class PlaybackModeButton extends StatelessWidget {
   ];
 
   static IconData iconFor(PlaybackMode mode) => switch (mode) {
-        PlaybackMode.sequential => Icons.arrow_right_alt_rounded,
-        PlaybackMode.shuffle => Icons.shuffle_rounded,
-        PlaybackMode.repeatOne => Icons.repeat_one_rounded,
-        PlaybackMode.repeatAll => Icons.repeat_rounded,
-      };
+    PlaybackMode.sequential => Icons.arrow_right_alt_rounded,
+    PlaybackMode.shuffle => Icons.shuffle_rounded,
+    PlaybackMode.repeatOne => Icons.repeat_one_rounded,
+    PlaybackMode.repeatAll => Icons.repeat_rounded,
+  };
 
   static String labelFor(PlaybackMode mode) => switch (mode) {
-        PlaybackMode.sequential => '顺序播放',
-        PlaybackMode.shuffle => '随机播放',
-        PlaybackMode.repeatOne => '单曲循环',
-        PlaybackMode.repeatAll => '列表循环',
-      };
+    PlaybackMode.sequential => '顺序播放',
+    PlaybackMode.shuffle => '随机播放',
+    PlaybackMode.repeatOne => '单曲循环',
+    PlaybackMode.repeatAll => '列表循环',
+  };
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    // 底栏需要图标按钮形态；YaruPopupMenuButton 偏下拉描边按钮，不适配此处。
+    return YaruPopupMenuButton<PlaybackMode>(
       tooltip: labelFor(mode),
-      onPressed: () => _openMenu(context),
-      icon: Icon(iconFor(mode), color: StrawberryCream.wine),
-    );
-  }
-
-  Future<void> _openMenu(BuildContext context) async {
-    final button = context.findRenderObject()! as RenderBox;
-    final overlay =
-        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
-    final bottomRight = button.localToGlobal(
-      button.size.bottomRight(Offset.zero),
-      ancestor: overlay,
-    );
-    final position = RelativeRect.fromRect(
-      Rect.fromPoints(topLeft, bottomRight),
-      Offset.zero & overlay.size,
-    );
-
-    final selected = await showMenu<PlaybackMode>(
-      context: context,
-      position: position,
       initialValue: mode,
-      items: [
+      showArrow: false,
+      padding: EdgeInsets.zero,
+      childPadding: const EdgeInsets.all(8),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.all(Colors.transparent),
+        side: WidgetStateProperty.all(BorderSide.none),
+        shape: WidgetStateProperty.all(const CircleBorder()),
+        minimumSize: WidgetStateProperty.all(const Size(40, 40)),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      onSelected: onChanged,
+      itemBuilder: (context) => [
         for (final item in _order)
           PopupMenuItem(
             value: item,
@@ -80,9 +71,7 @@ class PlaybackModeButton extends StatelessWidget {
             ),
           ),
       ],
+      child: Icon(iconFor(mode), color: StrawberryCream.wine),
     );
-    if (selected != null) {
-      onChanged(selected);
-    }
   }
 }
