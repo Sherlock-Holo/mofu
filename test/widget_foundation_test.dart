@@ -18,25 +18,27 @@ void main() {
   });
 
   group('StrawberryCream theme', () {
-    testWidgets('builds MaterialApp with white scaffold', (tester) async {
+    testWidgets('uses Yaru controls with strawberry cream palette', (
+      tester,
+    ) async {
+      final theme = StrawberryCream.theme();
       await tester.pumpWidget(
         MaterialApp(
-          theme: StrawberryCream.theme(),
+          theme: theme,
           home: const Scaffold(body: Text('Mofu')),
         ),
       );
       expect(find.text('Mofu'), findsOneWidget);
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.backgroundColor ?? Colors.white, Colors.white);
+      expect(theme.colorScheme.primary, StrawberryCream.strawberry);
+      expect(theme.colorScheme.secondary, StrawberryCream.strawberrySoft);
+      expect(theme.scaffoldBackgroundColor, Colors.white);
     });
   });
 
   group('CoverView', () {
     testWidgets('shows placeholder without cover', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(body: CoverView(size: 48)),
-        ),
+        const MaterialApp(home: Scaffold(body: CoverView(size: 48))),
       );
       expect(find.byIcon(Icons.music_note_rounded), findsOneWidget);
     });

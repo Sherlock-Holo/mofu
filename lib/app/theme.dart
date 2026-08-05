@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:yaru/theme.dart';
 
-/// Mofu色板与 Material 3 主题。
+/// Mofu 色板；控件造型由 Yaru 主题提供。
 abstract final class StrawberryCream {
   static const Color cream = Color(0xFFFFF7F2);
   static const Color creamDeep = Color(0xFFFFEDE3);
@@ -14,115 +15,40 @@ abstract final class StrawberryCream {
   static const double radius = 16;
   static const double radiusSm = 10;
 
+  /// Yaru 控件主题 + 草莓奶油色板。
   static ThemeData theme() {
-    final base = ColorScheme.fromSeed(
-      seedColor: strawberry,
-      brightness: Brightness.light,
-      primary: strawberry,
-      onPrimary: Colors.white,
-      secondary: strawberrySoft,
-      onSecondary: wine,
-      surface: cream,
-      onSurface: wine,
-      error: const Color(0xFFB3261E),
+    final yaru = createYaruLightTheme(
+      primaryColor: strawberry,
+      lightBaseColor: cream,
+      darkBaseColor: wine,
+      elevatedButtonColor: strawberry,
+      elevatedButtonTextColor: Colors.white,
+      errorColor: const Color(0xFFB3261E),
     );
 
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radius),
-    );
-
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: base,
+    return yaru.copyWith(
       scaffoldBackgroundColor: Colors.white,
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(
-          color: wine,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.5,
-        ),
-        headlineMedium: TextStyle(
-          color: wine,
-          fontWeight: FontWeight.w700,
-        ),
-        titleLarge: TextStyle(
-          color: wine,
-          fontWeight: FontWeight.w600,
-        ),
-        titleMedium: TextStyle(
-          color: wine,
-          fontWeight: FontWeight.w600,
-        ),
-        bodyLarge: TextStyle(color: wine, height: 1.35),
-        bodyMedium: TextStyle(color: wineMuted, height: 1.35),
-        labelLarge: TextStyle(
-          color: wine,
-          fontWeight: FontWeight.w600,
-        ),
+      colorScheme: yaru.colorScheme.copyWith(
+        secondary: strawberrySoft,
+        onSecondary: wine,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: yaru.appBarTheme.copyWith(
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         foregroundColor: wine,
         centerTitle: false,
       ),
-      cardTheme: CardThemeData(
+      cardTheme: yaru.cardTheme.copyWith(
         color: card,
         elevation: 0,
-        shape: shape,
         margin: EdgeInsets.zero,
         shadowColor: strawberry.withValues(alpha: 0.18),
       ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: cream,
-        shape: shape,
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: strawberry,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusSm),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: wine,
-          side: BorderSide(color: strawberry.withValues(alpha: 0.35)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusSm),
-          ),
-        ),
-      ),
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: wine),
-      ),
-      sliderTheme: SliderThemeData(
-        activeTrackColor: strawberry,
-        inactiveTrackColor: strawberryMist,
-        thumbColor: strawberry,
-        overlayColor: strawberry.withValues(alpha: 0.16),
-        trackHeight: 3,
-      ),
-      listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusSm),
-        ),
-        selectedTileColor: strawberryMist,
-        iconColor: wineMuted,
-        textColor: wine,
-      ),
-      dividerColor: strawberry.withValues(alpha: 0.12),
-      snackBarTheme: SnackBarThemeData(
+      snackBarTheme: yaru.snackBarTheme.copyWith(
         backgroundColor: wine,
         contentTextStyle: const TextStyle(color: cream),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusSm),
-        ),
       ),
     );
   }
@@ -131,18 +57,14 @@ abstract final class StrawberryCream {
   static const LinearGradient coverPlaceholder = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Color(0xFFFFE0E8),
-      Color(0xFFFFF7F2),
-      Color(0xFFF4A0B0),
-    ],
+    colors: [Color(0xFFFFE0E8), Color(0xFFFFF7F2), Color(0xFFF4A0B0)],
   );
 
   static List<BoxShadow> softShadow({double blur = 24, double dy = 10}) => [
-        BoxShadow(
-          color: strawberry.withValues(alpha: 0.16),
-          blurRadius: blur,
-          offset: Offset(0, dy),
-        ),
-      ];
+    BoxShadow(
+      color: strawberry.withValues(alpha: 0.16),
+      blurRadius: blur,
+      offset: Offset(0, dy),
+    ),
+  ];
 }
