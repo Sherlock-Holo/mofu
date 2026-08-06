@@ -108,6 +108,7 @@ class _SongTableState extends State<SongTable> {
                     playlistId: playlist.id,
                   );
                 },
+                onEnqueueNext: () => player.enqueueNext(song.path),
                 onOpenNowPlaying: () {
                   if (!playing) {
                     player.playPaths(
@@ -160,6 +161,7 @@ class _SongRow extends StatelessWidget {
     required this.song,
     required this.playing,
     required this.onPlay,
+    required this.onEnqueueNext,
     required this.onOpenNowPlaying,
   });
 
@@ -167,6 +169,7 @@ class _SongRow extends StatelessWidget {
   final Song song;
   final bool playing;
   final VoidCallback onPlay;
+  final VoidCallback onEnqueueNext;
   final VoidCallback onOpenNowPlaying;
 
   @override
@@ -187,6 +190,8 @@ class _SongRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(StrawberryCream.radiusSm),
         onTap: onPlay,
         onDoubleTap: onOpenNowPlaying,
+        onSecondaryTapDown: (details) =>
+            _showContextMenu(context, details.globalPosition),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
@@ -256,6 +261,27 @@ class _SongRow extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 右键时在指针位置弹出操作菜单；选中后由回调驱动播放控制。
+  Future<void> _showContextMenu(BuildContext context, Offset position) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final playNext = await showMenu<bool>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        overlay.size.width - position.dx,
+        overlay.size.height - position.dy,
+      ),
+      items: const [
+        PopupMenuItem(value: true, child: Text('下一首播放')),
+      ],
+    );
+    if (playNext == true) {
+      onEnqueueNext();
+    }
   }
 
   String _fileName(String path) {

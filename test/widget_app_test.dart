@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mofu/app/app.dart';
@@ -276,6 +277,31 @@ void main() {
       expect(player.currentIndex, BigInt.zero);
       expect(player.isPlaying, isTrue);
       expect(player.sourcePlaylistId, BigInt.from(2));
+    });
+
+    testWidgets('right-clicking a song enqueues it via context menu',
+        (tester) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+
+      await _pumpApp(tester, collection: collection, player: player);
+
+      await tester.tapAt(
+        tester.getCenter(find.text('奶油云')),
+        buttons: kSecondaryButton,
+      );
+      // 等菜单弹出动画结束，命中点才稳定。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('下一首播放'), findsOneWidget);
+      await tester.tap(find.text('下一首播放'));
+      await tester.pump();
+
+      expect(player.snapshot?.upNext.single.path, '/music/b.mp3');
     });
 
     testWidgets('playback mode button on home bar is wired to player',
