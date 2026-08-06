@@ -68,8 +68,7 @@ impl SessionMetadata {
     }
 
     fn fallback_title(snapshot: &PlayerSnapshot) -> Option<String> {
-        let index = snapshot.queue.current_index?;
-        let path = snapshot.queue.paths.get(index)?;
+        let path = snapshot.queue.current_path()?;
         Path::new(path)
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())

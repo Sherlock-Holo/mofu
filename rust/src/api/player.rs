@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::player::metadata::{
@@ -7,7 +8,7 @@ use crate::player::metadata::{
 };
 use crate::player::{
     PlaybackMode as DomainPlaybackMode, PlaybackState, Player as DomainPlayer, PlayerError,
-    PlayerSnapshot as DomainPlayerSnapshot,
+    PlayerSnapshot as DomainPlayerSnapshot, QueuePosition as DomainQueuePosition,
 };
 
 fn map_err(err: PlayerError) -> String {
@@ -93,6 +94,12 @@ impl Player {
     pub fn play_index(&self, index: u64) -> Result<(), String> {
         let index = usize::try_from(index).map_err(|err| err.to_string())?;
         self.inner.play_index(index).map_err(map_err)
+    }
+
+    /// Queue a track to play after the current one (up-next queue).
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn enqueue_next(&self, path: String) -> Result<(), String> {
+        self.inner.enqueue_next(path.into()).map_err(map_err)
     }
 
     /// Start the next queue item when available.
@@ -284,6 +291,19 @@ pub struct QueueItem {
     pub path: String,
 }
 
+impl QueueItem {
+    fn list_from(paths: Vec<PathBuf>) -> Vec<Self> {
+        paths
+            .into_iter()
+            .enumerate()
+            .map(|(index, path)| Self {
+                index: index as u64,
+                path: path.to_string_lossy().into_owned(),
+            })
+            .collect()
+    }
+}
+
 /// Unified state for polling from Flutter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlayerSnapshot {
@@ -292,8 +312,16 @@ pub struct PlayerSnapshot {
     pub state: PlayerState,
     pub volume: f64,
     pub playback_mode: PlaybackMode,
+    /// Index into `queue`; `None` when the current track comes from `up_next`.
     pub current_index: Option<u64>,
+    /// Whether the current track comes from the up-next queue.
+    pub current_from_up_next: bool,
+    /// Path of the current track; `None` when idle.
+    pub current_path: Option<String>,
+    /// Main queue in play order (shuffled when `playback_mode` is shuffle).
     pub queue: Vec<QueueItem>,
+    /// Manually queued tracks, in play order.
+    pub up_next: Vec<QueueItem>,
     pub metadata: Option<TrackMetadata>,
 }
 
@@ -388,23 +416,27 @@ impl From<&DomainTrackMetadata> for TrackMetadata {
 
 impl From<DomainPlayerSnapshot> for PlayerSnapshot {
     fn from(value: DomainPlayerSnapshot) -> Self {
+        let queue = value.queue;
+        let current_index = match &queue.current {
+            Some(DomainQueuePosition::Main(index)) => Some(*index as u64),
+            _ => None,
+        };
+        let current_from_up_next =
+            matches!(&queue.current, Some(DomainQueuePosition::Manual { .. }));
+        let current_path = queue
+            .current_path()
+            .map(|path| path.to_string_lossy().into_owned());
         Self {
             position_ms: value.position.as_millis() as u64,
             duration_ms: value.duration.as_millis() as u64,
             state: value.state.into(),
             volume: f64::from(value.volume),
-            playback_mode: value.queue.mode.into(),
-            current_index: value.queue.current_index.map(|index| index as u64),
-            queue: value
-                .queue
-                .paths
-                .into_iter()
-                .enumerate()
-                .map(|(index, path)| QueueItem {
-                    index: index as u64,
-                    path: path.to_string_lossy().into_owned(),
-                })
-                .collect(),
+            playback_mode: queue.mode.into(),
+            current_index,
+            current_from_up_next,
+            current_path,
+            queue: QueueItem::list_from(queue.main_paths),
+            up_next: QueueItem::list_from(queue.up_next_paths),
             metadata: value.metadata.as_ref().map(TrackMetadata::from),
         }
     }

@@ -104,10 +104,13 @@ PlayerSnapshot _playingSnapshot({
     volume: 0.8,
     playbackMode: mode,
     currentIndex: BigInt.zero,
+    currentFromUpNext: false,
+    currentPath: '/music/a.mp3',
     queue: [
       QueueItem(index: BigInt.zero, path: '/music/a.mp3'),
       QueueItem(index: BigInt.one, path: '/music/b.mp3'),
     ],
+    upNext: const [],
     metadata: _meta(
       title: '草莓糖',
       artist: '奶油乐队',

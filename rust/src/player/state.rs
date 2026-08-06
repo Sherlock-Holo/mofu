@@ -96,8 +96,9 @@ impl SharedProgress {
             state: AtomicU8::new(PlaybackState::Idle as u8),
             metadata: Mutex::new(None),
             queue: Mutex::new(QueueSnapshot {
-                paths: Vec::new(),
-                current_index: None,
+                main_paths: Vec::new(),
+                up_next_paths: Vec::new(),
+                current: None,
                 mode: PlaybackMode::Sequential,
             }),
             volume: Arc::new(SharedVolume::new()),

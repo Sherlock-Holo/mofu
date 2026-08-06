@@ -29,7 +29,7 @@ pub use error::PlayerError;
 pub use inspector::{MediaInspection, MediaInspector, SymphoniaMediaInspector};
 use media_session::MediaSession;
 use metadata::TrackMetadata;
-pub use queue::{PlaybackMode, QueueSnapshot};
+pub use queue::{PlaybackMode, QueuePosition, QueueSnapshot};
 use state::SharedProgress;
 pub use state::{PlaybackState, PlayerSnapshot, PositionSnapshot};
 use worker::DecodeWorker;
@@ -108,6 +108,11 @@ impl Player {
     /// Select and start one queue entry.
     pub fn play_index(&self, index: usize) -> Result<(), PlayerError> {
         self.request(|reply| PlayerCommand::PlayIndex { index, reply })
+    }
+
+    /// Append a track to the up-next queue; it plays after the current track.
+    pub fn enqueue_next(&self, path: PathBuf) -> Result<(), PlayerError> {
+        self.request(|reply| PlayerCommand::EnqueueNext { path, reply })
     }
 
     /// Start the next queue entry when available.

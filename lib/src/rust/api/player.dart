@@ -6,13 +6,16 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `map_err`
+// These functions are ignored because they are not marked as `pub`: `list_from`, `map_err`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Player>>
 abstract class Player implements RustOpaqueInterface {
   /// Track duration in milliseconds (0 if unknown).
   BigInt durationMs();
+
+  /// Queue a track to play after the current one (up-next queue).
+  void enqueueNext({required String path});
 
   /// Tags, cover, and lyrics for the open track (`None` if idle / not ready yet).
   TrackMetadata? metadata();
@@ -185,8 +188,21 @@ class PlayerSnapshot {
   final PlayerState state;
   final double volume;
   final PlaybackMode playbackMode;
+
+  /// Index into `queue`; `None` when the current track comes from `up_next`.
   final BigInt? currentIndex;
+
+  /// Whether the current track comes from the up-next queue.
+  final bool currentFromUpNext;
+
+  /// Path of the current track; `None` when idle.
+  final String? currentPath;
+
+  /// Main queue in play order (shuffled when `playback_mode` is shuffle).
   final List<QueueItem> queue;
+
+  /// Manually queued tracks, in play order.
+  final List<QueueItem> upNext;
   final TrackMetadata? metadata;
 
   const PlayerSnapshot({
@@ -196,7 +212,10 @@ class PlayerSnapshot {
     required this.volume,
     required this.playbackMode,
     this.currentIndex,
+    required this.currentFromUpNext,
+    this.currentPath,
     required this.queue,
+    required this.upNext,
     this.metadata,
   });
 
@@ -208,7 +227,10 @@ class PlayerSnapshot {
       volume.hashCode ^
       playbackMode.hashCode ^
       currentIndex.hashCode ^
+      currentFromUpNext.hashCode ^
+      currentPath.hashCode ^
       queue.hashCode ^
+      upNext.hashCode ^
       metadata.hashCode;
 
   @override
@@ -222,7 +244,10 @@ class PlayerSnapshot {
           volume == other.volume &&
           playbackMode == other.playbackMode &&
           currentIndex == other.currentIndex &&
+          currentFromUpNext == other.currentFromUpNext &&
+          currentPath == other.currentPath &&
           queue == other.queue &&
+          upNext == other.upNext &&
           metadata == other.metadata;
 }
 

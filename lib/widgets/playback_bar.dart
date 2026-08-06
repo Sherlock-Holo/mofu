@@ -72,7 +72,7 @@ class PlaybackBar extends StatelessWidget {
                               StrawberryCream.radiusSm,
                             ),
                             onTap:
-                                meta == null && snapshot?.currentIndex == null
+                                meta == null && snapshot?.currentPath == null
                                 ? null
                                 : () => context.go('/now-playing'),
                             child: Row(
@@ -181,18 +181,12 @@ class PlaybackBar extends StatelessWidget {
   }
 
   String _fallbackTitle(PlayerSnapshot? snapshot) {
-    final index = snapshot?.currentIndex;
-    if (index == null || snapshot == null) {
+    final path = snapshot?.currentPath;
+    if (path == null) {
       return '未在播放';
     }
-    for (final item in snapshot.queue) {
-      if (item.index == index) {
-        final path = item.path;
-        final slash = path.replaceAll('\\', '/').split('/').last;
-        return slash.isEmpty ? '未知曲目' : slash;
-      }
-    }
-    return '未知曲目';
+    final name = path.replaceAll('\\', '/').split('/').last;
+    return name.isEmpty ? '未知曲目' : name;
   }
 }
 

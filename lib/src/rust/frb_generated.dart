@@ -67,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1000516189;
+  int get rustContentHash => -1308503213;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -163,6 +163,11 @@ abstract class RustLibApi extends BaseApi {
   Future<double> crateApiCollectionCollectionVolume({required Collection that});
 
   BigInt crateApiPlayerPlayerDurationMs({required Player that});
+
+  void crateApiPlayerPlayerEnqueueNext({
+    required Player that,
+    required String path,
+  });
 
   TrackMetadata? crateApiPlayerPlayerMetadata({required Player that});
 
@@ -940,6 +945,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "Player_duration_ms", argNames: ["that"]);
 
   @override
+  void crateApiPlayerPlayerEnqueueNext({
+    required Player that,
+    required String path,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPlayer(
+            that,
+            serializer,
+          );
+          sse_encode_String(path, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPlayerPlayerEnqueueNextConstMeta,
+        argValues: [that, path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlayerPlayerEnqueueNextConstMeta =>
+      const TaskConstMeta(
+        debugName: "Player_enqueue_next",
+        argNames: ["that", "path"],
+      );
+
+  @override
   TrackMetadata? crateApiPlayerPlayerMetadata({required Player that}) {
     return handler.executeSync(
       SyncTask(
@@ -949,7 +987,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_box_autoadd_track_metadata,
@@ -971,7 +1009,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -998,7 +1036,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1025,7 +1063,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(path, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1051,7 +1089,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1077,7 +1115,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1107,7 +1145,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_u_64(index, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1136,7 +1174,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_64,
@@ -1162,7 +1200,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1192,7 +1230,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_u_64(positionMs, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1224,7 +1262,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_i_64(deltaMs, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1257,7 +1295,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_playback_mode(mode, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1294,7 +1332,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_String(paths, serializer);
           sse_encode_opt_box_autoadd_u_64(startIndex, serializer);
           sse_encode_bool(autoplay, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1327,7 +1365,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_f_64(volume, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1356,7 +1394,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_player_snapshot,
@@ -1382,7 +1420,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_player_state,
@@ -1408,7 +1446,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1433,7 +1471,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1460,7 +1498,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1484,7 +1522,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1813,8 +1851,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlayerSnapshot dco_decode_player_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return PlayerSnapshot(
       positionMs: dco_decode_u_64(arr[0]),
       durationMs: dco_decode_u_64(arr[1]),
@@ -1822,8 +1860,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       volume: dco_decode_f_64(arr[3]),
       playbackMode: dco_decode_playback_mode(arr[4]),
       currentIndex: dco_decode_opt_box_autoadd_u_64(arr[5]),
-      queue: dco_decode_list_queue_item(arr[6]),
-      metadata: dco_decode_opt_box_autoadd_track_metadata(arr[7]),
+      currentFromUpNext: dco_decode_bool(arr[6]),
+      currentPath: dco_decode_opt_String(arr[7]),
+      queue: dco_decode_list_queue_item(arr[8]),
+      upNext: dco_decode_list_queue_item(arr[9]),
+      metadata: dco_decode_opt_box_autoadd_track_metadata(arr[10]),
     );
   }
 
@@ -2356,7 +2397,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_volume = sse_decode_f_64(deserializer);
     var var_playbackMode = sse_decode_playback_mode(deserializer);
     var var_currentIndex = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_currentFromUpNext = sse_decode_bool(deserializer);
+    var var_currentPath = sse_decode_opt_String(deserializer);
     var var_queue = sse_decode_list_queue_item(deserializer);
+    var var_upNext = sse_decode_list_queue_item(deserializer);
     var var_metadata = sse_decode_opt_box_autoadd_track_metadata(deserializer);
     return PlayerSnapshot(
       positionMs: var_positionMs,
@@ -2365,7 +2409,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       volume: var_volume,
       playbackMode: var_playbackMode,
       currentIndex: var_currentIndex,
+      currentFromUpNext: var_currentFromUpNext,
+      currentPath: var_currentPath,
       queue: var_queue,
+      upNext: var_upNext,
       metadata: var_metadata,
     );
   }
@@ -2900,7 +2947,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_f_64(self.volume, serializer);
     sse_encode_playback_mode(self.playbackMode, serializer);
     sse_encode_opt_box_autoadd_u_64(self.currentIndex, serializer);
+    sse_encode_bool(self.currentFromUpNext, serializer);
+    sse_encode_opt_String(self.currentPath, serializer);
     sse_encode_list_queue_item(self.queue, serializer);
+    sse_encode_list_queue_item(self.upNext, serializer);
     sse_encode_opt_box_autoadd_track_metadata(self.metadata, serializer);
   }
 
@@ -3137,6 +3187,10 @@ class PlayerImpl extends RustOpaque implements Player {
   /// Track duration in milliseconds (0 if unknown).
   BigInt durationMs() =>
       RustLib.instance.api.crateApiPlayerPlayerDurationMs(that: this);
+
+  /// Queue a track to play after the current one (up-next queue).
+  void enqueueNext({required String path}) => RustLib.instance.api
+      .crateApiPlayerPlayerEnqueueNext(that: this, path: path);
 
   /// Tags, cover, and lyrics for the open track (`None` if idle / not ready yet).
   TrackMetadata? metadata() =>

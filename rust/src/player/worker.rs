@@ -147,6 +147,11 @@ impl DecodeWorker {
                 let result = self.play_index(index);
                 let _ = reply.send(result);
             }
+            PlayerCommand::EnqueueNext { path, reply } => {
+                self.queue.enqueue_next(path);
+                self.publish_queue();
+                let _ = reply.send(Ok(()));
+            }
             PlayerCommand::Next { reply } => {
                 let result = self.change_track(false, true);
                 let _ = reply.send(result);

@@ -6,7 +6,6 @@ import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
 import 'package:mofu/src/rust/api/collection.dart';
-import 'package:mofu/src/rust/api/player.dart' show PlaybackMode;
 import 'package:mofu/src/rust/api/setup.dart';
 import 'package:mofu/src/rust/frb_generated.dart';
 import 'package:provider/provider.dart';
@@ -134,12 +133,6 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     _player.persistPlaybackSession = null;
     _player.clearPlaybackSession = null;
     try {
-      // 会话存的是 path；但 Shuffle 下 queue.replace 会打乱并强制从下标 0 起播，
-      // 忽略 startIndex。先按顺序装入目标曲，再切回 shuffle（set_mode 会保留当前 path）。
-      final wasShuffle = _player.playbackMode == PlaybackMode.shuffle;
-      if (wasShuffle) {
-        _player.setPlaybackMode(PlaybackMode.sequential, persist: false);
-      }
       _player.setQueue(
         paths: paths,
         startIndex: BigInt.from(index),
@@ -147,9 +140,6 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
         playlistId: playlist.id,
       );
       _player.seek(session.positionMs);
-      if (wasShuffle) {
-        _player.setPlaybackMode(PlaybackMode.shuffle, persist: false);
-      }
       _collection.selectPlaylist(playlist.id);
     } finally {
       _player.persistPlaybackSession = persistSession;

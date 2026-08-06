@@ -36,6 +36,8 @@ pub enum PlayerCommand {
     },
     /// Select and start one queue entry.
     PlayIndex { index: usize, reply: CommandReply },
+    /// Append a track to the up-next queue (plays after the current track).
+    EnqueueNext { path: PathBuf, reply: CommandReply },
     /// Move to the next queue entry.
     Next { reply: CommandReply },
     /// Move to the previous queue entry.

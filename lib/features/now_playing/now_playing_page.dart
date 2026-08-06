@@ -117,17 +117,12 @@ class NowPlayingPage extends StatelessWidget {
   }
 
   String _fallbackTitle(PlayerController player) {
-    final index = player.currentIndex;
-    if (index == null) {
+    final path = player.currentPath;
+    if (path == null) {
       return '未在播放';
     }
-    for (final item in player.queue) {
-      if (item.index == index) {
-        final name = item.path.replaceAll('\\', '/').split('/').last;
-        return name.isEmpty ? '未知曲目' : name;
-      }
-    }
-    return '未知曲目';
+    final name = path.replaceAll('\\', '/').split('/').last;
+    return name.isEmpty ? '未知曲目' : name;
   }
 }
 

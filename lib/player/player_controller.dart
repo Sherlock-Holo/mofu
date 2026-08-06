@@ -69,6 +69,9 @@ class PlayerController extends ChangeNotifier {
   Timer? _volumePersistTimer;
   double? _pendingVolume;
   PlayerSnapshot? _snapshot;
+
+  /// fake 模式下插队曲的主队列锚点；upNext 耗尽后从锚点续播。
+  BigInt? _fakeUpNextAnchor;
   String? _error;
   bool _disposed = false;
 
@@ -85,18 +88,7 @@ class PlayerController extends ChangeNotifier {
   List<QueueItem> get queue => _snapshot?.queue ?? const [];
 
   /// 当前播放项路径；无队列或无选中项时为 null。
-  String? get currentPath {
-    final index = currentIndex;
-    if (index == null) {
-      return null;
-    }
-    for (final item in queue) {
-      if (item.index == index) {
-        return item.path;
-      }
-    }
-    return null;
-  }
+  String? get currentPath => _snapshot?.currentPath;
 
   /// 空闲快照，供假控制器与测试夹具复用。
   static PlayerSnapshot idleSnapshot({
@@ -109,7 +101,9 @@ class PlayerController extends ChangeNotifier {
       state: PlayerState.idle,
       volume: volume,
       playbackMode: playbackMode,
+      currentFromUpNext: false,
       queue: const [],
+      upNext: const [],
     );
   }
 
@@ -199,8 +193,8 @@ class PlayerController extends ChangeNotifier {
     if (previous == null || next == null) {
       return;
     }
-    final prevPath = _pathOf(previous);
-    final nextPath = _pathOf(next);
+    final prevPath = previous.currentPath;
+    final nextPath = next.currentPath;
     final trackChanged =
         previous.currentIndex != next.currentIndex || prevPath != nextPath;
     final pausedFromPlaying = previous.state == PlayerState.playing &&
@@ -208,19 +202,6 @@ class PlayerController extends ChangeNotifier {
     if (trackChanged || pausedFromPlaying) {
       persistCurrentSession();
     }
-  }
-
-  String? _pathOf(PlayerSnapshot snapshot) {
-    final index = snapshot.currentIndex;
-    if (index == null) {
-      return null;
-    }
-    for (final item in snapshot.queue) {
-      if (item.index == index) {
-        return item.path;
-      }
-    }
-    return null;
   }
 
   void _run(void Function() action) {
@@ -286,16 +267,7 @@ class PlayerController extends ChangeNotifier {
   void play() => _run(() {
         if (_fake) {
           final current = _snapshot ?? idleSnapshot();
-          _snapshot = PlayerSnapshot(
-            positionMs: current.positionMs,
-            durationMs: current.durationMs,
-            state: PlayerState.playing,
-            volume: current.volume,
-            playbackMode: current.playbackMode,
-            currentIndex: current.currentIndex,
-            queue: current.queue,
-            metadata: current.metadata,
-          );
+          _snapshot = current.copyWith(state: PlayerState.playing);
           return;
         }
         _player!.play();
@@ -304,16 +276,7 @@ class PlayerController extends ChangeNotifier {
   void pause() => _run(() {
         if (_fake) {
           final current = _snapshot ?? idleSnapshot();
-          _snapshot = PlayerSnapshot(
-            positionMs: current.positionMs,
-            durationMs: current.durationMs,
-            state: PlayerState.paused,
-            volume: current.volume,
-            playbackMode: current.playbackMode,
-            currentIndex: current.currentIndex,
-            queue: current.queue,
-            metadata: current.metadata,
-          );
+          _snapshot = current.copyWith(state: PlayerState.paused);
           return;
         }
         _player!.pause();
@@ -322,14 +285,12 @@ class PlayerController extends ChangeNotifier {
   void stop() => _run(() {
         if (_fake) {
           final current = _snapshot ?? idleSnapshot();
-          _snapshot = PlayerSnapshot(
+          _snapshot = current.copyWith(
             positionMs: BigInt.zero,
-            durationMs: current.durationMs,
             state: PlayerState.idle,
-            volume: current.volume,
-            playbackMode: current.playbackMode,
             currentIndex: null,
-            queue: current.queue,
+            currentFromUpNext: false,
+            currentPath: null,
             metadata: null,
           );
           return;
@@ -372,16 +333,7 @@ class PlayerController extends ChangeNotifier {
           if (duration > BigInt.zero && next > duration) {
             next = duration;
           }
-          _snapshot = PlayerSnapshot(
-            positionMs: next,
-            durationMs: current.durationMs,
-            state: current.state,
-            volume: current.volume,
-            playbackMode: current.playbackMode,
-            currentIndex: current.currentIndex,
-            queue: current.queue,
-            metadata: current.metadata,
-          );
+          _snapshot = current.copyWith(positionMs: next);
           return;
         }
         _player!.seek(positionMs: positionMs);
@@ -401,16 +353,7 @@ class PlayerController extends ChangeNotifier {
         final clamped = volume.clamp(0.0, 1.0);
         if (_fake) {
           final current = _snapshot ?? idleSnapshot();
-          _snapshot = PlayerSnapshot(
-            positionMs: current.positionMs,
-            durationMs: current.durationMs,
-            state: current.state,
-            volume: clamped,
-            playbackMode: current.playbackMode,
-            currentIndex: current.currentIndex,
-            queue: current.queue,
-            metadata: current.metadata,
-          );
+          _snapshot = current.copyWith(volume: clamped);
         } else {
           _player!.setVolume(volume: volume);
         }
@@ -473,16 +416,7 @@ class PlayerController extends ChangeNotifier {
   void setPlaybackMode(PlaybackMode mode, {bool persist = true}) => _run(() {
         if (_fake) {
           final current = _snapshot ?? idleSnapshot();
-          _snapshot = PlayerSnapshot(
-            positionMs: current.positionMs,
-            durationMs: current.durationMs,
-            state: current.state,
-            volume: current.volume,
-            playbackMode: mode,
-            currentIndex: current.currentIndex,
-            queue: current.queue,
-            metadata: current.metadata,
-          );
+          _snapshot = current.copyWith(playbackMode: mode);
         } else {
           _player!.setPlaybackMode(mode: mode);
         }
@@ -520,23 +454,25 @@ class PlayerController extends ChangeNotifier {
             QueueItem(index: BigInt.from(i), path: paths[i]),
         ];
         BigInt? index;
+        String? currentPath;
         if (queue.isNotEmpty) {
           final raw = startIndex?.toInt() ?? 0;
           final clamped = raw.clamp(0, queue.length - 1);
           index = BigInt.from(clamped);
+          currentPath = queue[clamped].path;
         }
         final current = _snapshot ?? idleSnapshot();
-        _snapshot = PlayerSnapshot(
+        _fakeUpNextAnchor = null;
+        _snapshot = current.copyWith(
           positionMs: BigInt.zero,
-          durationMs: current.durationMs,
           state: autoplay && index != null
               ? PlayerState.playing
               : PlayerState.ready,
-          volume: current.volume,
-          playbackMode: current.playbackMode,
           currentIndex: index,
+          currentFromUpNext: false,
+          currentPath: currentPath,
           queue: queue,
-          metadata: current.metadata,
+          upNext: const [],
         );
         return;
       }
@@ -555,19 +491,28 @@ class PlayerController extends ChangeNotifier {
             return;
           }
           final clamped = index.toInt().clamp(0, current.queue.length - 1);
-          _snapshot = PlayerSnapshot(
-            positionMs: BigInt.zero,
-            durationMs: current.durationMs,
-            state: PlayerState.playing,
-            volume: current.volume,
-            playbackMode: current.playbackMode,
-            currentIndex: BigInt.from(clamped),
-            queue: current.queue,
-            metadata: current.metadata,
-          );
+          _playMainAt(current, clamped);
           return;
         }
         _player!.playIndex(index: index);
+      });
+
+  /// 将歌曲加入"下一首播放"队列；当前曲目播完后按加入顺序播放。
+  void enqueueNext(String path) => _run(() {
+        if (_fake) {
+          final current = _snapshot ?? idleSnapshot();
+          _snapshot = current.copyWith(
+            upNext: [
+              ...current.upNext,
+              QueueItem(
+                index: BigInt.from(current.upNext.length),
+                path: path,
+              ),
+            ],
+          );
+          return;
+        }
+        _player!.enqueueNext(path: path);
       });
 
   /// 用整份列表路径替换队列并播放指定项。
@@ -588,29 +533,87 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
-  /// 播放列表全部曲目。随机模式下 Rust 会先打乱队列再从第一首顺序播放。
+  /// 播放列表全部曲目。随机模式下 Rust 会打乱队列，从第一首起按乱序各播一次。
   void playAll(List<String> paths, {BigInt? playlistId}) {
     playPaths(paths, startIndex: 0, playlistId: playlistId);
   }
 
   void _stepQueue(int delta) {
     final current = _snapshot ?? idleSnapshot();
+    if (delta > 0) {
+      _stepForward(current);
+    } else {
+      _stepBackward(current);
+    }
+  }
+
+  /// fake 前进，对齐 Rust 队列：先耗尽 upNext，再从锚点之后续播主队列。
+  void _stepForward(PlayerSnapshot current) {
+    if (current.upNext.isNotEmpty) {
+      if (!current.currentFromUpNext) {
+        _fakeUpNextAnchor = current.currentIndex;
+      }
+      final rest = current.upNext.skip(1).toList();
+      _snapshot = current.copyWith(
+        positionMs: BigInt.zero,
+        state: PlayerState.playing,
+        currentIndex: null,
+        currentFromUpNext: true,
+        currentPath: current.upNext.first.path,
+        upNext: [
+          for (var i = 0; i < rest.length; i++)
+            QueueItem(index: BigInt.from(i), path: rest[i].path),
+        ],
+      );
+      return;
+    }
+    if (current.currentFromUpNext) {
+      // 插队播完：续播锚点之后的主队列项；无锚点视为从头开始。
+      final next = (_fakeUpNextAnchor?.toInt() ?? -1) + 1;
+      if (next >= current.queue.length) {
+        return;
+      }
+      _playMainAt(current, next);
+      return;
+    }
     if (current.queue.isEmpty || current.currentIndex == null) {
       return;
     }
-    final next = current.currentIndex!.toInt() + delta;
-    if (next < 0 || next >= current.queue.length) {
+    final next = current.currentIndex!.toInt() + 1;
+    if (next >= current.queue.length) {
       return;
     }
-    _snapshot = PlayerSnapshot(
+    _playMainAt(current, next);
+  }
+
+  /// fake 后退，对齐 Rust 队列：从插队曲返回被打断的主队列锚点。
+  void _stepBackward(PlayerSnapshot current) {
+    if (current.currentFromUpNext) {
+      final anchor = _fakeUpNextAnchor?.toInt();
+      if (anchor == null || anchor >= current.queue.length) {
+        return;
+      }
+      _playMainAt(current, anchor);
+      return;
+    }
+    if (current.queue.isEmpty || current.currentIndex == null) {
+      return;
+    }
+    final previous = current.currentIndex!.toInt() - 1;
+    if (previous < 0) {
+      return;
+    }
+    _playMainAt(current, previous);
+  }
+
+  /// fake 下切到主队列第 [index] 项并开始播放。
+  void _playMainAt(PlayerSnapshot current, int index) {
+    _snapshot = current.copyWith(
       positionMs: BigInt.zero,
-      durationMs: current.durationMs,
       state: PlayerState.playing,
-      volume: current.volume,
-      playbackMode: current.playbackMode,
-      currentIndex: BigInt.from(next),
-      queue: current.queue,
-      metadata: current.metadata,
+      currentIndex: BigInt.from(index),
+      currentFromUpNext: false,
+      currentPath: current.queue[index].path,
     );
   }
 
@@ -626,5 +629,48 @@ class PlayerController extends ChangeNotifier {
       _player?.dispose();
     }
     super.dispose();
+  }
+}
+
+/// [copyWith] 中区分"未传"与"显式传 null"的哨兵。
+const _unset = Object();
+
+/// 以现有快照为底的拷贝；未提供的字段保持原值。
+///
+/// 可空字段（currentIndex / currentPath / metadata）借助 [_unset] 哨兵区分
+/// "未传"与"显式清空"，因此传入 `null` 会把该字段清掉。
+extension _PlayerSnapshotCopy on PlayerSnapshot {
+  PlayerSnapshot copyWith({
+    BigInt? positionMs,
+    BigInt? durationMs,
+    PlayerState? state,
+    double? volume,
+    PlaybackMode? playbackMode,
+    Object? currentIndex = _unset,
+    bool? currentFromUpNext,
+    Object? currentPath = _unset,
+    List<QueueItem>? queue,
+    List<QueueItem>? upNext,
+    Object? metadata = _unset,
+  }) {
+    return PlayerSnapshot(
+      positionMs: positionMs ?? this.positionMs,
+      durationMs: durationMs ?? this.durationMs,
+      state: state ?? this.state,
+      volume: volume ?? this.volume,
+      playbackMode: playbackMode ?? this.playbackMode,
+      currentIndex: identical(currentIndex, _unset)
+          ? this.currentIndex
+          : currentIndex as BigInt?,
+      currentFromUpNext: currentFromUpNext ?? this.currentFromUpNext,
+      currentPath: identical(currentPath, _unset)
+          ? this.currentPath
+          : currentPath as String?,
+      queue: queue ?? this.queue,
+      upNext: upNext ?? this.upNext,
+      metadata: identical(metadata, _unset)
+          ? this.metadata
+          : metadata as TrackMetadata?,
+    );
   }
 }
