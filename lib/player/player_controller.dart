@@ -47,6 +47,7 @@ class PlayerController extends ChangeNotifier {
     PlaybackMode playbackMode = PlaybackMode.sequential,
   }) {
     return PlayerSnapshot(
+      kind: PlayerSnapshotKind.full,
       positionMs: BigInt.zero,
       durationMs: BigInt.zero,
       state: PlayerState.idle,
@@ -84,7 +85,7 @@ class PlayerController extends ChangeNotifier {
         if (_disposed) {
           return;
         }
-        _snapshot = next;
+        _snapshot = _retainHeavyFields(_snapshot, next);
         _error = null;
         _retry = null;
         notifyListeners();
@@ -97,6 +98,54 @@ class PlayerController extends ChangeNotifier {
         _retry = _subscribe;
         notifyListeners();
       },
+    );
+  }
+
+  /// Progress ticks use [PlayerSnapshotKind.progress]; retain heavy fields for the same path.
+  static PlayerSnapshot _retainHeavyFields(
+    PlayerSnapshot? previous,
+    PlayerSnapshot next,
+  ) {
+    if (previous == null || next.kind != PlayerSnapshotKind.progress) {
+      return next;
+    }
+    if (previous.currentPath != next.currentPath) {
+      return next;
+    }
+
+    final prevMeta = previous.metadata;
+    final nextMeta = next.metadata;
+    final TrackMetadata? mergedMeta;
+    if (prevMeta != null && nextMeta != null) {
+      mergedMeta = TrackMetadata(
+        title: nextMeta.title,
+        artist: nextMeta.artist,
+        album: nextMeta.album,
+        albumArtist: nextMeta.albumArtist,
+        composer: nextMeta.composer,
+        lyricist: nextMeta.lyricist,
+        performer: nextMeta.performer,
+        genre: nextMeta.genre,
+        comment: nextMeta.comment,
+        date: nextMeta.date,
+        year: nextMeta.year,
+        trackNumber: nextMeta.trackNumber,
+        trackTotal: nextMeta.trackTotal,
+        discNumber: nextMeta.discNumber,
+        discTotal: nextMeta.discTotal,
+        cover: prevMeta.cover,
+        lyrics: prevMeta.lyrics,
+      );
+    } else {
+      mergedMeta = prevMeta ?? nextMeta;
+    }
+
+    return _copy(
+      next,
+      kind: PlayerSnapshotKind.full,
+      queue: previous.queue,
+      upNext: previous.upNext,
+      metadata: mergedMeta,
     );
   }
 
@@ -335,6 +384,7 @@ const _unset = Object();
 
 PlayerSnapshot _copy(
   PlayerSnapshot current, {
+  PlayerSnapshotKind? kind,
   BigInt? positionMs,
   BigInt? durationMs,
   PlayerState? state,
@@ -351,6 +401,7 @@ PlayerSnapshot _copy(
   Object? metadata = _unset,
 }) {
   return PlayerSnapshot(
+    kind: kind ?? current.kind,
     positionMs: positionMs ?? current.positionMs,
     durationMs: durationMs ?? current.durationMs,
     state: state ?? current.state,

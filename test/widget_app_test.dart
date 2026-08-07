@@ -98,6 +98,7 @@ PlayerSnapshot _playingSnapshot({
   PlayerState state = PlayerState.playing,
 }) {
   return PlayerSnapshot(
+    kind: PlayerSnapshotKind.full,
     positionMs: positionMs ?? BigInt.from(2500),
     durationMs: BigInt.from(180000),
     state: state,
@@ -179,6 +180,19 @@ Matrix4 _coverMatrix(WidgetTester tester) {
     ),
   );
   return Matrix4.copy(transform.transform);
+}
+
+/// 等到旋转 Transform 建立后再断言角度。
+Future<void> _waitForRotatingCover(WidgetTester tester) async {
+  final transform = find.descendant(
+    of: find.byType(RotatingCover),
+    matching: find.byType(Transform),
+  );
+  for (var i = 0; i < 20 && transform.evaluate().isEmpty; i++) {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+  }
+  expect(transform, findsOneWidget);
 }
 
 void main() {
@@ -391,6 +405,7 @@ void main() {
     ) async {
       final player = PlayerController.fake(snapshot: _playingSnapshot());
       await _pumpNowPlaying(tester, player: player);
+      await _waitForRotatingCover(tester);
 
       expect(find.byType(RotatingCover), findsOneWidget);
 
@@ -440,6 +455,7 @@ void main() {
           ),
         ),
       );
+      await _waitForRotatingCover(tester);
 
       final first = _coverMatrix(tester);
       await tester.pump(const Duration(seconds: 3));
@@ -454,7 +470,7 @@ void main() {
           ),
         ),
       );
-      await tester.pump();
+      await _waitForRotatingCover(tester);
       final paused = _coverMatrix(tester);
       await tester.pump(const Duration(seconds: 3));
       expect(_coverMatrix(tester).storage, paused.storage);

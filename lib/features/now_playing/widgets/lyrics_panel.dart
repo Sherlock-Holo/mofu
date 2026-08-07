@@ -7,11 +7,17 @@ class LyricsPanel extends StatefulWidget {
   const LyricsPanel({
     super.key,
     required this.lyrics,
-    required this.positionMs,
+    this.positionMs,
+    this.activeLineHint,
   });
 
   final List<Lyrics> lyrics;
-  final BigInt positionMs;
+
+  /// Fallback when [activeLineHint] is null (e.g. unit tests).
+  final BigInt? positionMs;
+
+  /// Prefers the Rust-computed active line so the host can skip position ticks.
+  final BigInt? activeLineHint;
 
   @override
   State<LyricsPanel> createState() => _LyricsPanelState();
@@ -66,7 +72,14 @@ class _LyricsPanelState extends State<LyricsPanel> {
   }
 
   int _activeIndex(List<LyricsLine> lines) {
-    final pos = widget.positionMs;
+    final hint = widget.activeLineHint;
+    if (hint != null) {
+      final index = hint.toInt();
+      if (index >= 0 && index < lines.length) {
+        return index;
+      }
+    }
+    final pos = widget.positionMs ?? BigInt.zero;
     var active = 0;
     for (var i = 0; i < lines.length; i++) {
       if (lines[i].startMs <= pos) {

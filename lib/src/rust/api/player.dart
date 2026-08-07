@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `list_from`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Player>>
 abstract class Player implements RustOpaqueInterface {
@@ -183,6 +183,8 @@ enum PlaybackMode { sequential, shuffle, repeatOne, repeatAll }
 
 /// Unified state for polling from Flutter.
 class PlayerSnapshot {
+  /// Full vs progress-only; Progress means UI retains heavy fields for the same path.
+  final PlayerSnapshotKind kind;
   final BigInt positionMs;
   final BigInt durationMs;
   final PlayerState state;
@@ -215,6 +217,7 @@ class PlayerSnapshot {
   final TrackMetadata? metadata;
 
   const PlayerSnapshot({
+    required this.kind,
     required this.positionMs,
     required this.durationMs,
     required this.state,
@@ -233,6 +236,7 @@ class PlayerSnapshot {
 
   @override
   int get hashCode =>
+      kind.hashCode ^
       positionMs.hashCode ^
       durationMs.hashCode ^
       state.hashCode ^
@@ -253,6 +257,7 @@ class PlayerSnapshot {
       identical(this, other) ||
       other is PlayerSnapshot &&
           runtimeType == other.runtimeType &&
+          kind == other.kind &&
           positionMs == other.positionMs &&
           durationMs == other.durationMs &&
           state == other.state &&
@@ -267,6 +272,16 @@ class PlayerSnapshot {
           queue == other.queue &&
           upNext == other.upNext &&
           metadata == other.metadata;
+}
+
+/// Whether a snapshot is a full authoritative payload or a progress cursor only.
+enum PlayerSnapshotKind {
+  /// Queue / metadata / cover / lyrics are complete and authoritative.
+  full,
+
+  /// Only playback cursor fields changed; UI must retain heavy fields from the
+  /// last Full snapshot for the same `current_path`.
+  progress,
 }
 
 /// Playback state for Flutter FFI.

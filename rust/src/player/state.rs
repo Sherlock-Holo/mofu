@@ -51,7 +51,8 @@ pub struct PlayerSnapshot {
     pub state: PlaybackState,
     pub volume: f32,
     pub queue: QueueSnapshot,
-    pub metadata: Option<TrackMetadata>,
+    /// Shared with the worker; progress ticks must not clone cover bytes.
+    pub metadata: Option<Arc<TrackMetadata>>,
 }
 
 /// Atomic gain read directly by the realtime audio callback.
@@ -212,7 +213,7 @@ impl SharedProgress {
             state: position.state,
             volume: self.volume(),
             queue: self.queue(),
-            metadata: self.metadata().map(|metadata| metadata.as_ref().clone()),
+            metadata: self.metadata(),
         }
     }
 }

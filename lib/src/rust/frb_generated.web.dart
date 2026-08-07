@@ -214,6 +214,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlayerSnapshot dco_decode_player_snapshot(dynamic raw);
 
   @protected
+  PlayerSnapshotKind dco_decode_player_snapshot_kind(dynamic raw);
+
+  @protected
   PlayerState dco_decode_player_state(dynamic raw);
 
   @protected
@@ -444,6 +447,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlayerSnapshot sse_decode_player_snapshot(SseDeserializer deserializer);
+
+  @protected
+  PlayerSnapshotKind sse_decode_player_snapshot_kind(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PlayerState sse_decode_player_state(SseDeserializer deserializer);
@@ -724,6 +732,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_player_snapshot(
     PlayerSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_player_snapshot_kind(
+    PlayerSnapshotKind self,
     SseSerializer serializer,
   );
 

@@ -2784,24 +2784,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlayerSnapshot dco_decode_player_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 14)
-      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
     return PlayerSnapshot(
-      positionMs: dco_decode_u_64(arr[0]),
-      durationMs: dco_decode_u_64(arr[1]),
-      state: dco_decode_player_state(arr[2]),
-      volume: dco_decode_f_64(arr[3]),
-      playbackMode: dco_decode_playback_mode(arr[4]),
-      currentIndex: dco_decode_opt_box_autoadd_u_64(arr[5]),
-      currentFromUpNext: dco_decode_bool(arr[6]),
-      currentPath: dco_decode_opt_String(arr[7]),
-      displayTitle: dco_decode_opt_String(arr[8]),
-      activeLyricsLine: dco_decode_opt_box_autoadd_u_64(arr[9]),
-      sourcePlaylistId: dco_decode_opt_box_autoadd_u_64(arr[10]),
-      queue: dco_decode_list_queue_item(arr[11]),
-      upNext: dco_decode_list_queue_item(arr[12]),
-      metadata: dco_decode_opt_box_autoadd_track_metadata(arr[13]),
+      kind: dco_decode_player_snapshot_kind(arr[0]),
+      positionMs: dco_decode_u_64(arr[1]),
+      durationMs: dco_decode_u_64(arr[2]),
+      state: dco_decode_player_state(arr[3]),
+      volume: dco_decode_f_64(arr[4]),
+      playbackMode: dco_decode_playback_mode(arr[5]),
+      currentIndex: dco_decode_opt_box_autoadd_u_64(arr[6]),
+      currentFromUpNext: dco_decode_bool(arr[7]),
+      currentPath: dco_decode_opt_String(arr[8]),
+      displayTitle: dco_decode_opt_String(arr[9]),
+      activeLyricsLine: dco_decode_opt_box_autoadd_u_64(arr[10]),
+      sourcePlaylistId: dco_decode_opt_box_autoadd_u_64(arr[11]),
+      queue: dco_decode_list_queue_item(arr[12]),
+      upNext: dco_decode_list_queue_item(arr[13]),
+      metadata: dco_decode_opt_box_autoadd_track_metadata(arr[14]),
     );
+  }
+
+  @protected
+  PlayerSnapshotKind dco_decode_player_snapshot_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return PlayerSnapshotKind.values[raw as int];
   }
 
   @protected
@@ -3432,6 +3439,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   PlayerSnapshot sse_decode_player_snapshot(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_player_snapshot_kind(deserializer);
     var var_positionMs = sse_decode_u_64(deserializer);
     var var_durationMs = sse_decode_u_64(deserializer);
     var var_state = sse_decode_player_state(deserializer);
@@ -3447,6 +3455,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_upNext = sse_decode_list_queue_item(deserializer);
     var var_metadata = sse_decode_opt_box_autoadd_track_metadata(deserializer);
     return PlayerSnapshot(
+      kind: var_kind,
       positionMs: var_positionMs,
       durationMs: var_durationMs,
       state: var_state,
@@ -3462,6 +3471,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       upNext: var_upNext,
       metadata: var_metadata,
     );
+  }
+
+  @protected
+  PlayerSnapshotKind sse_decode_player_snapshot_kind(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return PlayerSnapshotKind.values[inner];
   }
 
   @protected
@@ -4109,6 +4127,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_player_snapshot_kind(self.kind, serializer);
     sse_encode_u_64(self.positionMs, serializer);
     sse_encode_u_64(self.durationMs, serializer);
     sse_encode_player_state(self.state, serializer);
@@ -4123,6 +4142,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_queue_item(self.queue, serializer);
     sse_encode_list_queue_item(self.upNext, serializer);
     sse_encode_opt_box_autoadd_track_metadata(self.metadata, serializer);
+  }
+
+  @protected
+  void sse_encode_player_snapshot_kind(
+    PlayerSnapshotKind self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected

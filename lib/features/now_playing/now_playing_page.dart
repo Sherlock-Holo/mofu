@@ -10,6 +10,8 @@ import 'package:mofu/widgets/playback_bar.dart';
 import 'package:provider/provider.dart';
 
 /// 沉浸式播放页：模糊封面背景、旋转圆封面、同步歌词、复用底栏。
+///
+/// 进度 tick 只驱动歌词行高亮与底栏进度；背景 / 封面 / 文案按曲目变化订阅，避免整页重建。
 class NowPlayingPage extends StatelessWidget {
   const NowPlayingPage({super.key});
 
@@ -17,10 +19,108 @@ class NowPlayingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final player = context.watch<PlayerController>();
-    final meta = player.metadata;
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
 
+    return Scaffold(
+      body: _NowPlayingBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              const _NowPlayingAppBar(),
+              const Expanded(child: _NowPlayingBody()),
+              PlaybackBar(showNowPlayingEntry: false, compact: !wide),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NowPlayingAppBar extends StatelessWidget {
+  const _NowPlayingAppBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: '返回首页',
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          Expanded(
+            child: Text('正在播放', style: Theme.of(context).textTheme.titleMedium),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NowPlayingBackground extends StatelessWidget {
+  const _NowPlayingBackground({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    // 仅在曲目切换时重建模糊层；进度 tick 的 path 不变则跳过。
+    final path = context.select<PlayerController, String?>(
+      (player) => player.currentPath,
+    );
+    final cover = context.read<PlayerController>().metadata?.cover;
+    return BlurCoverBackground(key: ValueKey(path), cover: cover, child: child);
+  }
+}
+
+class _NowPlayingBody extends StatelessWidget {
+  const _NowPlayingBody();
+
+  static const _wideBreakpoint = 960.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: wide ? 40 : 20, vertical: 12),
+      child: wide
+          ? const Row(
+              children: [
+                Expanded(flex: 5, child: _CoverColumn(size: 300)),
+                SizedBox(width: 36),
+                Expanded(flex: 6, child: _LyricsHost()),
+              ],
+            )
+          : const Column(
+              children: [
+                _CoverColumn(size: 220),
+                SizedBox(height: 16),
+                Expanded(child: _LyricsHost()),
+              ],
+            ),
+    );
+  }
+}
+
+class _CoverColumn extends StatelessWidget {
+  const _CoverColumn({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = context.select<PlayerController, String?>(
+      (player) => player.currentPath,
+    );
+    final playing = context.select<PlayerController, bool>(
+      (player) => player.isPlaying,
+    );
+    final player = context.read<PlayerController>();
+    final meta = player.metadata;
     final title = (player.displayTitle?.trim().isNotEmpty == true)
         ? player.displayTitle!
         : (meta?.title?.trim().isNotEmpty == true ? meta!.title! : '未在播放');
@@ -31,114 +131,15 @@ class NowPlayingPage extends StatelessWidget {
         ? meta!.album!
         : '未知专辑';
 
-    return Scaffold(
-      body: BlurCoverBackground(
-        cover: meta?.cover,
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: '返回首页',
-                      onPressed: () => context.go('/'),
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                    Expanded(
-                      child: Text(
-                        '正在播放',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: wide ? 40 : 20,
-                    vertical: 12,
-                  ),
-                  child: wide
-                      ? Row(
-                          children: [
-                            Expanded(
-                              flex: 5,
-                              child: _CoverColumn(
-                                cover: meta?.cover,
-                                playing: player.isPlaying,
-                                title: title,
-                                album: album,
-                                artist: artist,
-                                size: 300,
-                              ),
-                            ),
-                            const SizedBox(width: 36),
-                            Expanded(
-                              flex: 6,
-                              child: LyricsPanel(
-                                lyrics: meta?.lyrics ?? const [],
-                                positionMs: player.positionMs,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            _CoverColumn(
-                              cover: meta?.cover,
-                              playing: player.isPlaying,
-                              title: title,
-                              album: album,
-                              artist: artist,
-                              size: 220,
-                            ),
-                            const SizedBox(height: 16),
-                            Expanded(
-                              child: LyricsPanel(
-                                lyrics: meta?.lyrics ?? const [],
-                                positionMs: player.positionMs,
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
-              PlaybackBar(showNowPlayingEntry: false, compact: !wide),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CoverColumn extends StatelessWidget {
-  const _CoverColumn({
-    required this.cover,
-    required this.playing,
-    required this.title,
-    required this.album,
-    required this.artist,
-    required this.size,
-  });
-
-  final CoverArt? cover;
-  final bool playing;
-  final String title;
-  final String album;
-  final String artist;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        RotatingCover(cover: cover, playing: playing, size: size),
+        RotatingCover(
+          key: ValueKey(path),
+          cover: meta?.cover,
+          playing: playing,
+          size: size,
+        ),
         const SizedBox(height: 28),
         Text(
           title,
@@ -166,6 +167,28 @@ class _CoverColumn extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       ],
+    );
+  }
+}
+
+class _LyricsHost extends StatelessWidget {
+  const _LyricsHost();
+
+  @override
+  Widget build(BuildContext context) {
+    final path = context.select<PlayerController, String?>(
+      (player) => player.currentPath,
+    );
+    final activeLine = context.select<PlayerController, BigInt?>(
+      (player) => player.activeLyricsLine,
+    );
+    final lyrics =
+        context.read<PlayerController>().metadata?.lyrics ?? const <Lyrics>[];
+
+    return LyricsPanel(
+      key: ValueKey(path),
+      lyrics: lyrics,
+      activeLineHint: activeLine,
     );
   }
 }

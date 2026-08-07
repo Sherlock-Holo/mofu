@@ -3752,6 +3752,7 @@ impl SseDecode for crate::api::collection::PlaybackSession {
 impl SseDecode for crate::api::player::PlayerSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <crate::api::player::PlayerSnapshotKind>::sse_decode(deserializer);
         let mut var_positionMs = <u64>::sse_decode(deserializer);
         let mut var_durationMs = <u64>::sse_decode(deserializer);
         let mut var_state = <crate::api::player::PlayerState>::sse_decode(deserializer);
@@ -3768,6 +3769,7 @@ impl SseDecode for crate::api::player::PlayerSnapshot {
         let mut var_metadata =
             <Option<crate::api::player::TrackMetadata>>::sse_decode(deserializer);
         return crate::api::player::PlayerSnapshot {
+            kind: var_kind,
             position_ms: var_positionMs,
             duration_ms: var_durationMs,
             state: var_state,
@@ -3782,6 +3784,18 @@ impl SseDecode for crate::api::player::PlayerSnapshot {
             queue: var_queue,
             up_next: var_upNext,
             metadata: var_metadata,
+        };
+    }
+}
+
+impl SseDecode for crate::api::player::PlayerSnapshotKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::player::PlayerSnapshotKind::Full,
+            1 => crate::api::player::PlayerSnapshotKind::Progress,
+            _ => unreachable!("Invalid variant for PlayerSnapshotKind: {}", inner),
         };
     }
 }
@@ -4397,6 +4411,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::collection::PlaybackSession>
 impl flutter_rust_bridge::IntoDart for crate::api::player::PlayerSnapshot {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
+            self.kind.into_into_dart().into_dart(),
             self.position_ms.into_into_dart().into_dart(),
             self.duration_ms.into_into_dart().into_dart(),
             self.state.into_into_dart().into_dart(),
@@ -4423,6 +4438,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::player::PlayerSnapshot>
     for crate::api::player::PlayerSnapshot
 {
     fn into_into_dart(self) -> crate::api::player::PlayerSnapshot {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::player::PlayerSnapshotKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Full => 0.into_dart(),
+            Self::Progress => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::player::PlayerSnapshotKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::player::PlayerSnapshotKind>
+    for crate::api::player::PlayerSnapshotKind
+{
+    fn into_into_dart(self) -> crate::api::player::PlayerSnapshotKind {
         self
     }
 }
@@ -4980,6 +5016,7 @@ impl SseEncode for crate::api::collection::PlaybackSession {
 impl SseEncode for crate::api::player::PlayerSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::player::PlayerSnapshotKind>::sse_encode(self.kind, serializer);
         <u64>::sse_encode(self.position_ms, serializer);
         <u64>::sse_encode(self.duration_ms, serializer);
         <crate::api::player::PlayerState>::sse_encode(self.state, serializer);
@@ -4994,6 +5031,22 @@ impl SseEncode for crate::api::player::PlayerSnapshot {
         <Vec<crate::api::player::QueueItem>>::sse_encode(self.queue, serializer);
         <Vec<crate::api::player::QueueItem>>::sse_encode(self.up_next, serializer);
         <Option<crate::api::player::TrackMetadata>>::sse_encode(self.metadata, serializer);
+    }
+}
+
+impl SseEncode for crate::api::player::PlayerSnapshotKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::player::PlayerSnapshotKind::Full => 0,
+                crate::api::player::PlayerSnapshotKind::Progress => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 

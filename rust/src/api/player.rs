@@ -182,6 +182,16 @@ pub enum PlaybackMode {
     RepeatAll,
 }
 
+/// Whether a snapshot is a full authoritative payload or a progress cursor only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerSnapshotKind {
+    /// Queue / metadata / cover / lyrics are complete and authoritative.
+    Full,
+    /// Only playback cursor fields changed; UI must retain heavy fields from the
+    /// last Full snapshot for the same `current_path`.
+    Progress,
+}
+
 impl From<PlaybackMode> for DomainPlaybackMode {
     fn from(value: PlaybackMode) -> Self {
         match value {
@@ -311,6 +321,8 @@ impl QueueItem {
 /// Unified state for polling from Flutter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlayerSnapshot {
+    /// Full vs progress-only; Progress means UI retains heavy fields for the same path.
+    pub kind: PlayerSnapshotKind,
     pub position_ms: u64,
     pub duration_ms: u64,
     pub state: PlayerState,
@@ -452,6 +464,7 @@ impl From<DomainPlayerSnapshot> for PlayerSnapshot {
             .and_then(|meta| meta.active_lyrics_line_index(position_ms))
             .map(|index| index as u64);
         Self {
+            kind: PlayerSnapshotKind::Full,
             position_ms,
             duration_ms: value.duration.as_millis() as u64,
             state: value.state.into(),
@@ -465,7 +478,10 @@ impl From<DomainPlayerSnapshot> for PlayerSnapshot {
             source_playlist_id: None,
             queue: QueueItem::list_from(queue.main_paths),
             up_next: QueueItem::list_from(queue.up_next_paths),
-            metadata: value.metadata.as_ref().map(TrackMetadata::from),
+            metadata: value
+                .metadata
+                .as_ref()
+                .map(|meta| TrackMetadata::from(meta.as_ref())),
         }
     }
 }

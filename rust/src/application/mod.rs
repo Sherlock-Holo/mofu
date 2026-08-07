@@ -10,7 +10,9 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use async_global_executor::Task;
-pub(crate) use dto::{BootstrapSnapshot, LibrarySnapshot, PlayerView, PlaylistView, SongView};
+pub(crate) use dto::{
+    BootstrapSnapshot, LibrarySnapshot, PlayerView, PlayerViewKind, PlaylistView, SongView,
+};
 use flume::{Receiver, Sender, TrySendError};
 use ports::{CollectionAdapter, CollectionPort, PlayerAdapter, PlayerPort};
 use tracing::{debug, warn};
@@ -401,8 +403,13 @@ where
             }
 
             if view != last_view {
-                last_view = view.clone();
-                self.fanout_player(view);
+                let published = if view.is_progress_only_update(&last_view) {
+                    view.as_progress_tick()
+                } else {
+                    view.clone()
+                };
+                last_view = view;
+                self.fanout_player(published);
             }
         }
     }

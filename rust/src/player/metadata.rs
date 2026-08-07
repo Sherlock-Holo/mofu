@@ -146,6 +146,29 @@ impl TrackMetadata {
         }
     }
 
+    /// Tags only: drop cover bytes and lyric bodies for progress-tick fan-out.
+    pub(crate) fn without_heavy_fields(&self) -> Self {
+        Self {
+            title: self.title.clone(),
+            artist: self.artist.clone(),
+            album: self.album.clone(),
+            album_artist: self.album_artist.clone(),
+            composer: self.composer.clone(),
+            lyricist: self.lyricist.clone(),
+            performer: self.performer.clone(),
+            genre: self.genre.clone(),
+            comment: self.comment.clone(),
+            date: self.date.clone(),
+            year: self.year,
+            track_number: self.track_number,
+            track_total: self.track_total,
+            disc_number: self.disc_number,
+            disc_total: self.disc_total,
+            cover: None,
+            lyrics: Vec::new(),
+        }
+    }
+
     /// Append an embedded plain-text lyrics entry.
     pub(crate) fn push_embedded_plain_lyrics(
         &mut self,

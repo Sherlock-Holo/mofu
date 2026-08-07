@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:mofu/app/theme.dart';
@@ -87,60 +86,47 @@ class CoverView extends StatelessWidget {
   }
 }
 
-/// 模糊放大封面背景 + 粉白遮罩；无封面时用同色系渐变。
+/// 低分辨率封面背景 + 粉白遮罩；无封面时用同色系渐变。
+///
+/// 通过低分辨率解码后双线性放大近似柔化效果，避免动画期间反复执行
+/// 全屏 [ImageFiltered]。
 class BlurCoverBackground extends StatelessWidget {
-  const BlurCoverBackground({
-    super.key,
-    required this.cover,
-    this.child,
-    this.blurSigma = 28,
-    this.scale = 1.25,
-  });
+  const BlurCoverBackground({super.key, required this.cover, this.child});
 
   final CoverArt? cover;
   final Widget? child;
-  final double blurSigma;
-  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final bytes = cover?.data;
     final hasCover = bytes != null && bytes.isNotEmpty;
-    // 按可视区域 × scale × DPR 解码；模糊背景不需要原图像素。
     final mediaSize = MediaQuery.sizeOf(context);
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    final cacheWidth = (mediaSize.width * scale * dpr).round().clamp(1, 4096);
-    final cacheHeight = (mediaSize.height * scale * dpr).round().clamp(1, 4096);
+    final dpr = MediaQuery.devicePixelRatioOf(context).clamp(1.0, 2.0);
+    // 约 1/8 线性尺寸；放大后的平滑插值自然形成柔化背景。
+    final cacheWidth = (mediaSize.width * dpr / 8).round().clamp(64, 256);
+    final cacheHeight = (mediaSize.height * dpr / 8).round().clamp(64, 256);
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (hasCover)
-          Transform.scale(
-            scale: scale,
-            child: ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(
-                sigmaX: blurSigma,
-                sigmaY: blurSigma,
-                tileMode: TileMode.clamp,
-              ),
-              child: Image.memory(
-                bytes,
-                fit: BoxFit.cover,
-                cacheWidth: cacheWidth,
-                cacheHeight: cacheHeight,
-                gaplessPlayback: true,
-                errorBuilder: (_, _, _) =>
-                    const ColoredBox(color: StrawberryCream.creamDeep),
-              ),
-            ),
-          )
-        else
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: StrawberryCream.coverPlaceholder,
-            ),
-          ),
+        RepaintBoundary(
+          child: hasCover
+              ? Image.memory(
+                  bytes,
+                  fit: BoxFit.cover,
+                  cacheWidth: cacheWidth,
+                  cacheHeight: cacheHeight,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, _, _) =>
+                      const ColoredBox(color: StrawberryCream.creamDeep),
+                )
+              : const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: StrawberryCream.coverPlaceholder,
+                  ),
+                ),
+        ),
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(

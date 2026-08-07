@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/player/player_controller.dart';
+import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:mofu/widgets/duration_format.dart';
 import 'package:mofu/widgets/playback_mode_button.dart';
@@ -9,6 +10,8 @@ import 'package:provider/provider.dart';
 import 'package:yaru/yaru.dart';
 
 /// 底部播放控制条：进度、跳转、音量与模式。
+///
+/// 进度条单独订阅 position；曲目信息按 path 订阅，避免进度 tick 重建封面与按钮。
 class PlaybackBar extends StatelessWidget {
   const PlaybackBar({
     super.key,
@@ -21,16 +24,6 @@ class PlaybackBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final player = context.watch<PlayerController>();
-    final snapshot = player.snapshot;
-    final meta = snapshot?.metadata;
-    final title = (snapshot?.displayTitle?.trim().isNotEmpty == true)
-        ? snapshot!.displayTitle!
-        : (meta?.title?.trim().isNotEmpty == true ? meta!.title! : '未在播放');
-    final artist = meta?.artist?.trim().isNotEmpty == true
-        ? meta!.artist!
-        : '未知歌手';
-
     return Material(
       color: StrawberryCream.card,
       elevation: 0,
@@ -58,7 +51,7 @@ class PlaybackBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ProgressSlider(player: player),
+            const _ProgressSlider(),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -66,108 +59,15 @@ class PlaybackBar extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: showNowPlayingEntry
-                        ? InkWell(
-                            borderRadius: BorderRadius.circular(
-                              StrawberryCream.radiusSm,
-                            ),
-                            onTap: meta == null && snapshot?.currentPath == null
-                                ? null
-                                : () => context.go('/now-playing'),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CoverView(
-                                  cover: meta?.cover,
-                                  size: compact ? 44 : 52,
-                                ),
-                                const SizedBox(width: 12),
-                                Flexible(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleMedium,
-                                      ),
-                                      Text(
-                                        artist,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
+                        ? _TrackInfo(compact: compact)
                         : const SizedBox.shrink(),
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    YaruIconButton(
-                      tooltip: '上一首',
-                      onPressed: player.previous,
-                      icon: const Icon(Icons.skip_previous_rounded),
-                    ),
-                    YaruIconButton(
-                      tooltip: '后退 10 秒',
-                      onPressed: () => player.seekRelative(-10000),
-                      icon: const Icon(Icons.replay_10_rounded),
-                    ),
-                    _PlayPauseButton(
-                      playing: player.isPlaying,
-                      onPressed: player.togglePlayPause,
-                    ),
-                    YaruIconButton(
-                      tooltip: '前进 10 秒',
-                      onPressed: () => player.seekRelative(10000),
-                      icon: const Icon(Icons.forward_10_rounded),
-                    ),
-                    YaruIconButton(
-                      tooltip: '下一首',
-                      onPressed: player.next,
-                      icon: const Icon(Icons.skip_next_rounded),
-                    ),
-                  ],
-                ),
+                const _TransportControls(),
                 Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (compact)
-                          _CompactVolumeButton(
-                            volume: player.volume,
-                            onChanged: player.setVolume,
-                          )
-                        else ...[
-                          _VolumeIcon(volume: player.volume, size: 20),
-                          _VolumeLabel(volume: player.volume),
-                          SizedBox(
-                            width: 108,
-                            child: Slider(
-                              value: player.volume.clamp(0, 1),
-                              onChanged: player.setVolume,
-                            ),
-                          ),
-                        ],
-                        PlaybackModeButton(
-                          mode: player.playbackMode,
-                          onChanged: player.setPlaybackMode,
-                        ),
-                      ],
-                    ),
+                    child: _VolumeAndMode(compact: compact),
                   ),
                 ),
               ],
@@ -179,11 +79,138 @@ class PlaybackBar extends StatelessWidget {
   }
 }
 
+class _TrackInfo extends StatelessWidget {
+  const _TrackInfo({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = context.select<PlayerController, String?>(
+      (player) => player.currentPath,
+    );
+    final player = context.read<PlayerController>();
+    final meta = player.metadata;
+    final title = (player.displayTitle?.trim().isNotEmpty == true)
+        ? player.displayTitle!
+        : (meta?.title?.trim().isNotEmpty == true ? meta!.title! : '未在播放');
+    final artist = meta?.artist?.trim().isNotEmpty == true
+        ? meta!.artist!
+        : '未知歌手';
+    final canOpen = meta != null || path != null;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(StrawberryCream.radiusSm),
+      onTap: canOpen ? () => context.go('/now-playing') : null,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CoverView(cover: meta?.cover, size: compact ? 44 : 52),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Text(
+                  artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransportControls extends StatelessWidget {
+  const _TransportControls();
+
+  @override
+  Widget build(BuildContext context) {
+    final playing = context.select<PlayerController, bool>(
+      (player) => player.isPlaying,
+    );
+    final player = context.read<PlayerController>();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        YaruIconButton(
+          tooltip: '上一首',
+          onPressed: player.previous,
+          icon: const Icon(Icons.skip_previous_rounded),
+        ),
+        YaruIconButton(
+          tooltip: '后退 10 秒',
+          onPressed: () => player.seekRelative(-10000),
+          icon: const Icon(Icons.replay_10_rounded),
+        ),
+        _PlayPauseButton(playing: playing, onPressed: player.togglePlayPause),
+        YaruIconButton(
+          tooltip: '前进 10 秒',
+          onPressed: () => player.seekRelative(10000),
+          icon: const Icon(Icons.forward_10_rounded),
+        ),
+        YaruIconButton(
+          tooltip: '下一首',
+          onPressed: player.next,
+          icon: const Icon(Icons.skip_next_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+class _VolumeAndMode extends StatelessWidget {
+  const _VolumeAndMode({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final volume = context.select<PlayerController, double>(
+      (player) => player.volume,
+    );
+    final mode = context.select<PlayerController, PlaybackMode>(
+      (player) => player.playbackMode,
+    );
+    final player = context.read<PlayerController>();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (compact)
+          _CompactVolumeButton(volume: volume, onChanged: player.setVolume)
+        else ...[
+          _VolumeIcon(volume: volume, size: 20),
+          _VolumeLabel(volume: volume),
+          SizedBox(
+            width: 108,
+            child: Slider(
+              value: volume.clamp(0, 1),
+              onChanged: player.setVolume,
+            ),
+          ),
+        ],
+        PlaybackModeButton(mode: mode, onChanged: player.setPlaybackMode),
+      ],
+    );
+  }
+}
+
 /// 拖动时本地预览，松手后再 seek，避免拖动中反复打 FFI。
 class _ProgressSlider extends StatefulWidget {
-  const _ProgressSlider({required this.player});
-
-  final PlayerController player;
+  const _ProgressSlider();
 
   @override
   State<_ProgressSlider> createState() => _ProgressSliderState();
@@ -194,13 +221,16 @@ class _ProgressSliderState extends State<_ProgressSlider> {
 
   @override
   Widget build(BuildContext context) {
-    final player = widget.player;
-    final position = player.positionMs.toInt().toDouble();
-    final duration = player.durationMs.toInt().toDouble().clamp(
-      1,
-      double.infinity,
+    final position = context.select<PlayerController, BigInt>(
+      (player) => player.positionMs,
     );
-    final live = (position / duration).clamp(0.0, 1.0);
+    final durationMs = context.select<PlayerController, BigInt>(
+      (player) => player.durationMs,
+    );
+    final player = context.read<PlayerController>();
+    final positionValue = position.toInt().toDouble();
+    final duration = durationMs.toInt().toDouble().clamp(1, double.infinity);
+    final live = (positionValue / duration).clamp(0.0, 1.0);
     final progress = _scrubbing ?? (live.isFinite ? live : 0.0);
     final displayMs = BigInt.from((progress * duration).round());
 
@@ -224,7 +254,7 @@ class _ProgressSliderState extends State<_ProgressSlider> {
           ),
         ),
         Text(
-          DurationFormat.fromMs(player.durationMs),
+          DurationFormat.fromMs(durationMs),
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: StrawberryCream.wineMuted),

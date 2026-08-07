@@ -5,11 +5,12 @@ use std::thread;
 
 use crate::api::collection::{Playlist, PlaylistKind, Song};
 use crate::api::player::{
-    CoverArt, PlaybackMode, PlayerSnapshot, PlayerState, QueueItem, TrackMetadata,
+    CoverArt, PlaybackMode, PlayerSnapshot, PlayerSnapshotKind, PlayerState, QueueItem,
+    TrackMetadata,
 };
 use crate::application::{
     Application, BootstrapSnapshot as DomainBootstrap, LibrarySnapshot as DomainLibrary,
-    PlayerView, PlaylistView, SongView,
+    PlayerView, PlayerViewKind, PlaylistView, SongView,
 };
 use crate::collection::PlaylistKind as DomainPlaylistKind;
 use crate::frb_generated::StreamSink;
@@ -267,9 +268,19 @@ impl From<SongView> for Song {
     }
 }
 
+impl From<PlayerViewKind> for PlayerSnapshotKind {
+    fn from(value: PlayerViewKind) -> Self {
+        match value {
+            PlayerViewKind::Full => Self::Full,
+            PlayerViewKind::Progress => Self::Progress,
+        }
+    }
+}
+
 impl From<PlayerView> for PlayerSnapshot {
     fn from(value: PlayerView) -> Self {
         Self {
+            kind: value.kind.into(),
             position_ms: value.position_ms,
             duration_ms: value.duration_ms,
             state: PlayerState::from(value.state),
@@ -297,7 +308,10 @@ impl From<PlayerView> for PlayerSnapshot {
                     path: item.path,
                 })
                 .collect(),
-            metadata: value.metadata.as_ref().map(TrackMetadata::from),
+            metadata: value
+                .metadata
+                .as_ref()
+                .map(|meta| TrackMetadata::from(meta.as_ref())),
         }
     }
 }
