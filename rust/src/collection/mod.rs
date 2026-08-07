@@ -6,7 +6,7 @@ mod model;
 mod scan;
 mod store;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -408,6 +408,95 @@ impl<C: Catalog> Collection<C> {
         self.catalog.clear_playback_session().await
     }
 
+    /// Validate a persisted session against the current catalog.
+    ///
+    /// Returns `None` (and clears the stored session) when the playlist or path is gone.
+    pub(crate) async fn resolve_playback_session(
+        &self,
+        session: PlaybackSession,
+    ) -> Result<Option<SessionRestorePlan>, CollectionError> {
+        let row = match self.catalog.playlist_row(session.playlist_id).await {
+            Ok(row) => row,
+            Err(CollectionError::PlaylistNotFound) => {
+                self.clear_playback_session().await?;
+                return Ok(None);
+            }
+            Err(err) => return Err(err),
+        };
+        let paths = self
+            .catalog
+            .playlist_song_paths(session.playlist_id)
+            .await?;
+        let Some(start_index) = paths.iter().position(|path| path == &session.path) else {
+            self.clear_playback_session().await?;
+            return Ok(None);
+        };
+        Ok(Some(SessionRestorePlan {
+            playlist_id: row.id,
+            paths,
+            start_index,
+            position_ms: session.position_ms,
+        }))
+    }
+
+    /// Build a library snapshot with lite songs, then attach covers in batches.
+    pub(crate) async fn library_snapshot_lite(&self) -> Result<Vec<Playlist>, CollectionError> {
+        self.playlists().await
+    }
+
+    /// Load covers for every song missing artwork and return playlists with covers merged.
+    pub(crate) async fn library_snapshot_with_covers(
+        &self,
+    ) -> Result<Vec<Playlist>, CollectionError> {
+        let mut playlists = self.playlists().await?;
+        let paths = playlists
+            .iter()
+            .flat_map(|playlist| playlist.songs.iter())
+            .filter(|song| song.metadata.cover.is_none())
+            .map(|song| song.path.clone())
+            .collect::<Vec<_>>();
+        if paths.is_empty() {
+            return Ok(playlists);
+        }
+
+        let mut by_path = HashMap::new();
+        for chunk in paths.chunks(COVER_HYDRATE_CHUNK_SIZE) {
+            for (path, cover) in self.covers_for_paths(chunk.to_vec()).await? {
+                by_path.insert(path, cover);
+            }
+        }
+        if by_path.is_empty() {
+            return Ok(playlists);
+        }
+
+        for playlist in &mut playlists {
+            for song in &mut playlist.songs {
+                if let Some(cover) = by_path.remove(&song.path) {
+                    song.metadata.cover = Some(cover);
+                }
+            }
+        }
+        Ok(playlists)
+    }
+
+    /// Pick a virtual playlist for file import, creating one when needed.
+    pub(crate) async fn ensure_virtual_import_target(
+        &self,
+        selected_id: Option<PlaylistId>,
+    ) -> Result<Playlist, CollectionError> {
+        if let Some(id) = selected_id {
+            match self.catalog.playlist_row(id).await {
+                Ok(row) if row.kind == PlaylistKind::Virtual => {
+                    return self.playlist_by_id(id).await;
+                }
+                Ok(_) | Err(CollectionError::PlaylistNotFound) => {}
+                Err(err) => return Err(err),
+            }
+        }
+        self.create_virtual(DEFAULT_IMPORT_PLAYLIST_NAME.to_owned())
+            .await
+    }
+
     fn validated_name(name: String) -> Result<String, CollectionError> {
         let name = name.trim().to_owned();
         if name.is_empty() {
@@ -417,6 +506,41 @@ impl<C: Catalog> Collection<C> {
         }
     }
 }
+
+impl Playlist {
+    /// First non-empty cover in playlist order.
+    pub(crate) fn cover(&self) -> Option<&CoverArt> {
+        self.songs.iter().find_map(|song| {
+            song.metadata
+                .cover
+                .as_ref()
+                .filter(|cover| !cover.data.is_empty())
+        })
+    }
+}
+
+impl Song {
+    /// Metadata title with the path basename as a fallback.
+    pub(crate) fn display_title(&self) -> String {
+        TrackMetadata::display_title(&self.path, self.metadata.title.as_deref())
+    }
+}
+
+/// Validated resume plan ready for the player queue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SessionRestorePlan {
+    /// Source playlist containing the restored track.
+    pub playlist_id: PlaylistId,
+    /// Queue paths in persisted playlist order.
+    pub paths: Vec<String>,
+    /// Selected queue index for the persisted path.
+    pub start_index: usize,
+    /// Resume position within the selected track.
+    pub position_ms: u64,
+}
+
+const COVER_HYDRATE_CHUNK_SIZE: usize = 32;
+const DEFAULT_IMPORT_PLAYLIST_NAME: &str = "导入的歌曲";
 
 #[cfg(test)]
 mod tests {
@@ -481,7 +605,7 @@ mod tests {
 
     #[test]
     fn virtual_playlist_persists_and_deduplicates_files() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let media = dirs.data.join("song.mp3");
             fs::write(&media, b"fake").expect("write media");
@@ -508,7 +632,7 @@ mod tests {
 
     #[test]
     fn refresh_virtual_removes_missing_paths() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let media = dirs.data.join("song.flac");
             fs::write(&media, b"fake").expect("write media");
@@ -529,7 +653,7 @@ mod tests {
 
     #[test]
     fn directory_playlist_scans_recursively_and_ignores_other_files() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let nested = dirs.data.join("album");
             fs::create_dir_all(&nested).expect("create nested directory");
@@ -548,7 +672,7 @@ mod tests {
 
     #[test]
     fn cover_cache_missing_file_yields_no_cover() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let collection = open_test_collection(&dirs).await;
             let playlist = collection
@@ -568,7 +692,7 @@ mod tests {
 
     #[test]
     fn playback_mode_defaults_and_persists_across_reopen() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             {
                 let collection = open_test_collection(&dirs).await;
@@ -603,7 +727,7 @@ mod tests {
 
     #[test]
     fn concurrent_meta_reads_do_not_fail() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let collection = open_test_collection(&dirs).await;
             collection
@@ -623,7 +747,7 @@ mod tests {
 
     #[test]
     fn concurrent_meta_read_and_write_do_not_fail() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let collection = open_test_collection(&dirs).await;
             collection.set_volume(0.25).await.expect("seed volume");
@@ -650,7 +774,7 @@ mod tests {
 
     #[test]
     fn volume_and_session_default_when_missing() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let collection = open_test_collection(&dirs).await;
             assert_eq!(collection.volume().await.expect("default volume"), 1.0);
@@ -666,7 +790,7 @@ mod tests {
 
     #[test]
     fn volume_and_session_persist_across_reopen() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let session = PlaybackSession {
                 playlist_id: 7,
@@ -709,7 +833,7 @@ mod tests {
 
     #[test]
     fn corrupt_playback_session_is_cleared() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             {
                 let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
@@ -737,7 +861,7 @@ mod tests {
 
     #[test]
     fn open_creates_schema_when_db_file_exists_without_tables() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let path = dirs.data.join(CATALOG_FILE_NAME);
             fs::write(&path, []).expect("create empty db file");
@@ -755,7 +879,7 @@ mod tests {
 
     #[test]
     fn open_recreates_missing_tables_after_partial_schema() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let path = dirs.data.join(CATALOG_FILE_NAME);
             {
@@ -782,7 +906,7 @@ mod tests {
 
     #[test]
     fn invalid_numeric_fields_are_rejected() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
                 .await
@@ -821,7 +945,7 @@ mod tests {
 
     #[test]
     fn garbage_collect_removes_orphan_songs_and_covers() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let dirs = TestDirs::new();
             let collection = open_test_collection(&dirs).await;
             let playlist = collection
@@ -867,5 +991,110 @@ mod tests {
                 .expect("lookup after GC");
             assert!(leftover.is_empty(), "orphan song row should be deleted");
         });
+    }
+
+    #[test]
+    fn resolve_playback_session_validates_path_and_clears_invalid() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let media = dirs.data.join("song.mp3");
+            fs::write(&media, b"fake").expect("write media");
+            let collection = open_test_collection(&dirs).await;
+            let playlist = collection
+                .create_virtual("Resume".into())
+                .await
+                .expect("create");
+            collection
+                .add_files(playlist.id, vec![media.clone()])
+                .await
+                .expect("add");
+            let path = media.to_string_lossy().into_owned();
+            let plan = collection
+                .resolve_playback_session(PlaybackSession {
+                    playlist_id: playlist.id,
+                    path: path.clone(),
+                    position_ms: 1234,
+                })
+                .await
+                .expect("resolve")
+                .expect("valid session");
+            assert_eq!(plan.playlist_id, playlist.id);
+            assert_eq!(plan.start_index, 0);
+            assert_eq!(plan.position_ms, 1234);
+
+            let cleared = collection
+                .resolve_playback_session(PlaybackSession {
+                    playlist_id: playlist.id,
+                    path: "/missing.mp3".into(),
+                    position_ms: 1,
+                })
+                .await
+                .expect("resolve missing");
+            assert!(cleared.is_none());
+            assert!(
+                collection
+                    .playback_session()
+                    .await
+                    .expect("session after clear")
+                    .is_none()
+            );
+        });
+    }
+
+    #[test]
+    fn ensure_virtual_import_target_reuses_or_creates() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let collection = open_test_collection(&dirs).await;
+            let created = collection
+                .create_virtual("目标".into())
+                .await
+                .expect("create");
+            let reused = collection
+                .ensure_virtual_import_target(Some(created.id))
+                .await
+                .expect("reuse");
+            assert_eq!(reused.id, created.id);
+
+            let directory = collection
+                .add_directory(dirs.data.clone())
+                .await
+                .expect("directory playlist");
+            let fallback = collection
+                .ensure_virtual_import_target(Some(directory.id))
+                .await
+                .expect("create import playlist");
+            assert_eq!(fallback.name, "导入的歌曲");
+            assert_eq!(fallback.kind, PlaylistKind::Virtual);
+        });
+    }
+
+    #[test]
+    fn playlist_cover_picks_first_non_empty() {
+        let playlist = Playlist {
+            id: 1,
+            name: "x".into(),
+            kind: PlaylistKind::Virtual,
+            songs: vec![
+                Song {
+                    path: "/a.mp3".into(),
+                    duration_ms: 1,
+                    metadata: TrackMetadata::default(),
+                },
+                Song {
+                    path: "/b.mp3".into(),
+                    duration_ms: 1,
+                    metadata: TrackMetadata {
+                        cover: Some(CoverArt {
+                            mime_type: Some("image/jpeg".into()),
+                            data: vec![1, 2, 3],
+                        }),
+                        ..Default::default()
+                    },
+                },
+            ],
+        };
+        let cover = playlist.cover().expect("cover");
+        assert_eq!(cover.data, vec![1, 2, 3]);
     }
 }

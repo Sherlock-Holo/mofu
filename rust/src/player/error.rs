@@ -19,6 +19,8 @@ pub enum PlayerError {
     Output(#[from] OutputError),
     #[error("player command channel closed")]
     CommandChannelClosed,
+    #[error("player command timed out")]
+    CommandTimedOut,
     #[error("invalid seek position")]
     InvalidSeek,
     #[error("queue index is out of range")]

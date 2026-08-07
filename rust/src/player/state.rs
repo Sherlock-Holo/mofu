@@ -2,6 +2,8 @@ use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use flume::{Receiver, Sender, TrySendError};
+
 use super::metadata::TrackMetadata;
 use super::queue::{PlaybackMode, QueueSnapshot};
 
@@ -86,27 +88,48 @@ pub(crate) struct SharedProgress {
     metadata: Mutex<Option<Arc<TrackMetadata>>>,
     queue: Mutex<QueueSnapshot>,
     volume: Arc<SharedVolume>,
+    /// Coalesced wakeups for the application watch loop (`bounded(1)` + `try_send`).
+    change_tx: Sender<()>,
+}
+
+/// Receives coalesced progress/state wakeups from [`SharedProgress`].
+pub(crate) struct ProgressNotify {
+    rx: Receiver<()>,
+}
+
+impl ProgressNotify {
+    /// Block until a semantic change is signaled, or `timeout` elapses (progress tick).
+    pub(crate) fn recv_timeout(&self, timeout: Duration) {
+        let _ = self.rx.recv_timeout(timeout);
+    }
 }
 
 impl SharedProgress {
-    pub(crate) fn new() -> Self {
-        Self {
-            position_ms: AtomicU64::new(0),
-            duration_ms: AtomicU64::new(0),
-            state: AtomicU8::new(PlaybackState::Idle as u8),
-            metadata: Mutex::new(None),
-            queue: Mutex::new(QueueSnapshot {
-                main_paths: Vec::new(),
-                up_next_paths: Vec::new(),
-                current: None,
-                mode: PlaybackMode::Sequential,
-            }),
-            volume: Arc::new(SharedVolume::new()),
-        }
+    pub(crate) fn new() -> (Self, ProgressNotify) {
+        // Capacity 1: overlapping wakeups collapse into a single pending signal.
+        let (change_tx, change_rx) = flume::bounded(1);
+        (
+            Self {
+                position_ms: AtomicU64::new(0),
+                duration_ms: AtomicU64::new(0),
+                state: AtomicU8::new(PlaybackState::Idle as u8),
+                metadata: Mutex::new(None),
+                queue: Mutex::new(QueueSnapshot {
+                    main_paths: Vec::new(),
+                    up_next_paths: Vec::new(),
+                    current: None,
+                    mode: PlaybackMode::Sequential,
+                }),
+                volume: Arc::new(SharedVolume::new()),
+                change_tx,
+            },
+            ProgressNotify { rx: change_rx },
+        )
     }
 
     pub(crate) fn set_state(&self, state: PlaybackState) {
         self.state.store(state as u8, Ordering::Release);
+        self.notify_change();
     }
 
     pub(crate) fn state(&self) -> PlaybackState {
@@ -128,10 +151,12 @@ impl SharedProgress {
 
     pub(crate) fn set_metadata(&self, metadata: TrackMetadata) {
         *self.metadata.lock().expect("metadata mutex poisoned") = Some(Arc::new(metadata));
+        self.notify_change();
     }
 
     pub(crate) fn clear_metadata(&self) {
         *self.metadata.lock().expect("metadata mutex poisoned") = None;
+        self.notify_change();
     }
 
     pub(crate) fn metadata(&self) -> Option<Arc<TrackMetadata>> {
@@ -143,6 +168,7 @@ impl SharedProgress {
 
     pub(crate) fn set_queue(&self, queue: QueueSnapshot) {
         *self.queue.lock().expect("queue mutex poisoned") = queue;
+        self.notify_change();
     }
 
     pub(crate) fn queue(&self) -> QueueSnapshot {
@@ -151,6 +177,7 @@ impl SharedProgress {
 
     pub(crate) fn set_volume(&self, volume: f32) {
         self.volume.set(volume);
+        self.notify_change();
     }
 
     pub(crate) fn volume(&self) -> f32 {
@@ -159,6 +186,14 @@ impl SharedProgress {
 
     pub(crate) fn shared_volume(&self) -> Arc<SharedVolume> {
         self.volume.clone()
+    }
+
+    pub(crate) fn notify_change(&self) {
+        // Full channel means a wakeup is already pending; drop the duplicate.
+        match self.change_tx.try_send(()) {
+            Ok(()) | Err(TrySendError::Full(())) => {}
+            Err(TrySendError::Disconnected(())) => {}
+        }
     }
 
     pub(crate) fn snapshot(&self) -> PositionSnapshot {
@@ -197,5 +232,18 @@ mod tests {
         assert!((volume.get() - 0.4).abs() < f32::EPSILON);
         volume.set(f32::NAN);
         assert_eq!(volume.get(), 0.0);
+    }
+
+    #[test]
+    fn semantic_notifications_are_coalesced() {
+        let (progress, notify) = SharedProgress::new();
+        progress.set_state(PlaybackState::Playing);
+        progress.set_volume(0.5);
+
+        assert_eq!(notify.rx.try_recv(), Ok(()));
+        assert!(matches!(
+            notify.rx.try_recv(),
+            Err(flume::TryRecvError::Empty)
+        ));
     }
 }

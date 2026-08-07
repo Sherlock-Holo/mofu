@@ -7,8 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'player.dart';
 
-// These functions are ignored because they are not marked as `pub`: `ffi_playback_mode`, `map_err`, `stored_playback_mode`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Collection>>
 abstract class Collection implements RustOpaqueInterface {
@@ -116,6 +115,9 @@ class Playlist {
   final String name;
   final PlaylistKind kind;
   final String? directoryPath;
+
+  /// First non-empty song cover in list order.
+  final CoverArt? cover;
   final List<Song> songs;
 
   const Playlist({
@@ -123,6 +125,7 @@ class Playlist {
     required this.name,
     required this.kind,
     this.directoryPath,
+    this.cover,
     required this.songs,
   });
 
@@ -132,6 +135,7 @@ class Playlist {
       name.hashCode ^
       kind.hashCode ^
       directoryPath.hashCode ^
+      cover.hashCode ^
       songs.hashCode;
 
   @override
@@ -143,6 +147,7 @@ class Playlist {
           name == other.name &&
           kind == other.kind &&
           directoryPath == other.directoryPath &&
+          cover == other.cover &&
           songs == other.songs;
 }
 
@@ -153,16 +158,24 @@ enum PlaylistKind { directory, virtual }
 class Song {
   final String path;
   final BigInt durationMs;
+
+  /// Title tag with path basename fallback.
+  final String displayTitle;
   final TrackMetadata metadata;
 
   const Song({
     required this.path,
     required this.durationMs,
+    required this.displayTitle,
     required this.metadata,
   });
 
   @override
-  int get hashCode => path.hashCode ^ durationMs.hashCode ^ metadata.hashCode;
+  int get hashCode =>
+      path.hashCode ^
+      durationMs.hashCode ^
+      displayTitle.hashCode ^
+      metadata.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -171,6 +184,7 @@ class Song {
           runtimeType == other.runtimeType &&
           path == other.path &&
           durationMs == other.durationMs &&
+          displayTitle == other.displayTitle &&
           metadata == other.metadata;
 }
 

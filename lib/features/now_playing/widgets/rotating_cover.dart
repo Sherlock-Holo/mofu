@@ -102,11 +102,7 @@ class _RotatingCoverState extends State<RotatingCover>
                   ),
                 ),
               ),
-            CoverView(
-              cover: widget.cover,
-              size: size * 0.72,
-              circular: true,
-            ),
+            CoverView(cover: widget.cover, size: size * 0.72, circular: true),
             Container(
               width: size * 0.12,
               height: size * 0.12,

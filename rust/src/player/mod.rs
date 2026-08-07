@@ -18,45 +18,50 @@ mod state;
 mod worker;
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
 use command::CommandReply;
 pub use command::PlayerCommand;
-use crossbeam_channel::Sender;
 pub use error::PlayerError;
+use flume::{RecvTimeoutError, SendTimeoutError, Sender};
 pub use inspector::{MediaInspection, MediaInspector, SymphoniaMediaInspector};
 use media_session::MediaSession;
 use metadata::TrackMetadata;
 pub use queue::{PlaybackMode, QueuePosition, QueueSnapshot};
-use state::SharedProgress;
 pub use state::{PlaybackState, PlayerSnapshot, PositionSnapshot};
+use state::{ProgressNotify, SharedProgress};
 use worker::DecodeWorker;
+
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Handle for controlling background decode/playback.
 ///
 /// Dropping the player sends [`PlayerCommand::Shutdown`] and joins the worker.
 /// FFI exposes a separate opaque mirror in `crate::api::player`.
 pub(crate) struct Player {
-    cmd_tx: Sender<PlayerCommand>,
+    cmd_tx: Mutex<Option<Sender<PlayerCommand>>>,
     progress: Arc<SharedProgress>,
-    worker: Option<JoinHandle<()>>,
-    media_session: Option<MediaSession>,
+    progress_notify: ProgressNotify,
+    worker: Mutex<Option<JoinHandle<()>>>,
+    media_session: Mutex<Option<MediaSession>>,
 }
 
 impl Player {
     /// Create a player and start its decode worker thread.
     pub fn new() -> Self {
-        let (cmd_tx, cmd_rx) = crossbeam_channel::bounded::<PlayerCommand>(32);
-        let progress = Arc::new(SharedProgress::new());
+        let (cmd_tx, cmd_rx) = flume::bounded::<PlayerCommand>(32);
+        let (progress, progress_notify) = SharedProgress::new();
+        let progress = Arc::new(progress);
         let worker = DecodeWorker::spawn(cmd_rx, progress.clone());
         let media_session = MediaSession::try_attach(cmd_tx.clone(), progress.clone());
         Self {
-            cmd_tx,
+            cmd_tx: Mutex::new(Some(cmd_tx)),
             progress,
-            worker: Some(worker),
-            media_session,
+            progress_notify,
+            worker: Mutex::new(Some(worker)),
+            media_session: Mutex::new(media_session),
         }
     }
 
@@ -165,18 +170,54 @@ impl Player {
         self.progress.metadata()
     }
 
+    /// Wait until a semantic player change is signaled, or `timeout` elapses.
+    pub(crate) fn wait_for_progress(&self, timeout: Duration) {
+        self.progress_notify.recv_timeout(timeout);
+    }
+
+    /// Wake the application watch loop without changing player state.
+    pub(crate) fn wake_progress_watch(&self) {
+        self.progress.notify_change();
+    }
+
+    /// Stop media-session and decode workers. Safe to call more than once.
+    pub(crate) fn shutdown(&self) {
+        self.media_session
+            .lock()
+            .expect("media session mutex")
+            .take();
+        if let Some(cmd_tx) = self.cmd_tx.lock().expect("command sender mutex").take() {
+            let _ = cmd_tx.try_send(PlayerCommand::Shutdown);
+        }
+        if let Some(worker) = self.worker.lock().expect("worker mutex").take() {
+            let _ = worker.join();
+        }
+    }
+
     /// Send a command and block until the worker replies on a bounded(1) channel.
     fn request(
         &self,
         command: impl FnOnce(CommandReply) -> PlayerCommand,
     ) -> Result<(), PlayerError> {
-        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
-        self.cmd_tx
-            .send(command(reply_tx))
-            .map_err(|_| PlayerError::CommandChannelClosed)?;
-        reply_rx
-            .recv()
-            .map_err(|_| PlayerError::CommandChannelClosed)?
+        let (reply_tx, reply_rx) = flume::bounded(1);
+        let cmd_tx = self
+            .cmd_tx
+            .lock()
+            .expect("command sender mutex")
+            .clone()
+            .ok_or(PlayerError::CommandChannelClosed)?;
+        match cmd_tx.send_timeout(command(reply_tx), COMMAND_TIMEOUT) {
+            Ok(()) => {}
+            Err(SendTimeoutError::Disconnected(_)) => {
+                return Err(PlayerError::CommandChannelClosed);
+            }
+            Err(SendTimeoutError::Timeout(_)) => return Err(PlayerError::CommandTimedOut),
+        }
+        match reply_rx.recv_timeout(COMMAND_TIMEOUT) {
+            Ok(result) => result,
+            Err(RecvTimeoutError::Disconnected) => Err(PlayerError::CommandChannelClosed),
+            Err(RecvTimeoutError::Timeout) => Err(PlayerError::CommandTimedOut),
+        }
     }
 }
 
@@ -188,12 +229,24 @@ impl Default for Player {
 
 impl Drop for Player {
     fn drop(&mut self) {
-        // Tear down the OS session before shutting down the worker so late
-        // media-key events do not race a closed command channel.
-        self.media_session.take();
-        let _ = self.cmd_tx.send(PlayerCommand::Shutdown);
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
+        self.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shutdown_is_idempotent_and_closes_commands() {
+        let player = Player::new();
+
+        player.shutdown();
+        player.shutdown();
+
+        assert!(matches!(
+            player.play(),
+            Err(PlayerError::CommandChannelClosed)
+        ));
     }
 }

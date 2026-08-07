@@ -8,9 +8,10 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 async-compat = "0.2.5"
+async-global-executor = "3.1.0"
 cpal = "0.18.1"
-crossbeam-channel = "0.5.16"
 directories = "6.0.0"
+flume = { version = "0.12.0", features = ["async"] }
 flutter_rust_bridge = "=2.12.0"
 rand = "0.10.2"
 rubato = "4.0.0"
@@ -30,7 +31,6 @@ walkdir = "2.5.0"
 rfd = "0.17.2"
 
 [dev-dependencies]
-futures-executor = "0.3.33"
 futures-util = "0.3.33"
 
 [target.'cfg(windows)'.dependencies]

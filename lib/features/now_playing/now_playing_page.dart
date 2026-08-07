@@ -21,13 +21,15 @@ class NowPlayingPage extends StatelessWidget {
     final meta = player.metadata;
     final wide = MediaQuery.sizeOf(context).width >= _wideBreakpoint;
 
-    final title = (meta?.title?.trim().isNotEmpty == true)
-        ? meta!.title!
-        : _fallbackTitle(player);
-    final artist =
-        meta?.artist?.trim().isNotEmpty == true ? meta!.artist! : '未知歌手';
-    final album =
-        meta?.album?.trim().isNotEmpty == true ? meta!.album! : '未知专辑';
+    final title = (player.displayTitle?.trim().isNotEmpty == true)
+        ? player.displayTitle!
+        : (meta?.title?.trim().isNotEmpty == true ? meta!.title! : '未在播放');
+    final artist = meta?.artist?.trim().isNotEmpty == true
+        ? meta!.artist!
+        : '未知歌手';
+    final album = meta?.album?.trim().isNotEmpty == true
+        ? meta!.album!
+        : '未知专辑';
 
     return Scaffold(
       body: BlurCoverBackground(
@@ -105,24 +107,12 @@ class NowPlayingPage extends StatelessWidget {
                         ),
                 ),
               ),
-              PlaybackBar(
-                showNowPlayingEntry: false,
-                compact: !wide,
-              ),
+              PlaybackBar(showNowPlayingEntry: false, compact: !wide),
             ],
           ),
         ),
       ),
     );
-  }
-
-  String _fallbackTitle(PlayerController player) {
-    final path = player.currentPath;
-    if (path == null) {
-      return '未在播放';
-    }
-    final name = path.replaceAll('\\', '/').split('/').last;
-    return name.isEmpty ? '未知曲目' : name;
   }
 }
 
@@ -148,11 +138,7 @@ class _CoverColumn extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        RotatingCover(
-          cover: cover,
-          playing: playing,
-          size: size,
-        ),
+        RotatingCover(cover: cover, playing: playing, size: size),
         const SizedBox(height: 28),
         Text(
           title,
@@ -167,9 +153,9 @@ class _CoverColumn extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: StrawberryCream.wineMuted,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: StrawberryCream.wineMuted),
         ),
         const SizedBox(height: 4),
         Text(

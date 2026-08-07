@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/player/player_controller.dart';
-import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:mofu/widgets/duration_format.dart';
 import 'package:mofu/widgets/playback_mode_button.dart';
@@ -25,9 +24,9 @@ class PlaybackBar extends StatelessWidget {
     final player = context.watch<PlayerController>();
     final snapshot = player.snapshot;
     final meta = snapshot?.metadata;
-    final title = meta?.title?.trim().isNotEmpty == true
-        ? meta!.title!
-        : _fallbackTitle(snapshot);
+    final title = (snapshot?.displayTitle?.trim().isNotEmpty == true)
+        ? snapshot!.displayTitle!
+        : (meta?.title?.trim().isNotEmpty == true ? meta!.title! : '未在播放');
     final artist = meta?.artist?.trim().isNotEmpty == true
         ? meta!.artist!
         : '未知歌手';
@@ -71,8 +70,7 @@ class PlaybackBar extends StatelessWidget {
                             borderRadius: BorderRadius.circular(
                               StrawberryCream.radiusSm,
                             ),
-                            onTap:
-                                meta == null && snapshot?.currentPath == null
+                            onTap: meta == null && snapshot?.currentPath == null
                                 ? null
                                 : () => context.go('/now-playing'),
                             child: Row(
@@ -178,15 +176,6 @@ class PlaybackBar extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _fallbackTitle(PlayerSnapshot? snapshot) {
-    final path = snapshot?.currentPath;
-    if (path == null) {
-      return '未在播放';
-    }
-    final name = path.replaceAll('\\', '/').split('/').last;
-    return name.isEmpty ? '未知曲目' : name;
   }
 }
 

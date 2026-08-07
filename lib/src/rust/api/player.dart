@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `list_from`, `map_err`
+// These functions are ignored because they are not marked as `pub`: `list_from`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Player>>
@@ -198,6 +198,15 @@ class PlayerSnapshot {
   /// Path of the current track; `None` when idle.
   final String? currentPath;
 
+  /// Resolved title for the current track (tag or basename).
+  final String? displayTitle;
+
+  /// Active timed lyric line index for `position_ms`, when available.
+  final BigInt? activeLyricsLine;
+
+  /// Playlist that sourced the current main queue, when known.
+  final BigInt? sourcePlaylistId;
+
   /// Main queue in play order (shuffled when `playback_mode` is shuffle).
   final List<QueueItem> queue;
 
@@ -214,6 +223,9 @@ class PlayerSnapshot {
     this.currentIndex,
     required this.currentFromUpNext,
     this.currentPath,
+    this.displayTitle,
+    this.activeLyricsLine,
+    this.sourcePlaylistId,
     required this.queue,
     required this.upNext,
     this.metadata,
@@ -229,6 +241,9 @@ class PlayerSnapshot {
       currentIndex.hashCode ^
       currentFromUpNext.hashCode ^
       currentPath.hashCode ^
+      displayTitle.hashCode ^
+      activeLyricsLine.hashCode ^
+      sourcePlaylistId.hashCode ^
       queue.hashCode ^
       upNext.hashCode ^
       metadata.hashCode;
@@ -246,6 +261,9 @@ class PlayerSnapshot {
           currentIndex == other.currentIndex &&
           currentFromUpNext == other.currentFromUpNext &&
           currentPath == other.currentPath &&
+          displayTitle == other.displayTitle &&
+          activeLyricsLine == other.activeLyricsLine &&
+          sourcePlaylistId == other.sourcePlaylistId &&
           queue == other.queue &&
           upNext == other.upNext &&
           metadata == other.metadata;

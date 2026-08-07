@@ -5,18 +5,18 @@ import 'package:mofu/app/router.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
-import 'package:mofu/src/rust/api/collection.dart';
+import 'package:mofu/src/rust/api/app.dart';
 import 'package:mofu/src/rust/api/setup.dart';
 import 'package:mofu/src/rust/frb_generated.dart';
 import 'package:provider/provider.dart';
 
 /// Mofu播放器根应用：注入控制器、主题与路由。
 class MofuApp extends StatefulWidget {
-  const MofuApp({
-    super.key,
-    this.collectionController,
-    this.playerController,
-  });
+  const MofuApp({super.key, this.collectionController, this.playerController})
+    : assert(
+        (collectionController == null) == (playerController == null),
+        'Inject both controllers together, or neither.',
+      );
 
   final CollectionController? collectionController;
   final PlayerController? playerController;
@@ -33,6 +33,9 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
   late final _router = createRouter();
   var _ownsCollection = false;
   var _ownsPlayer = false;
+  var _bootstrapping = false;
+  Object? _bootstrapError;
+  App? _app;
 
   @override
   void initState() {
@@ -40,116 +43,63 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _ownsCollection = widget.collectionController == null;
     _ownsPlayer = widget.playerController == null;
-    _player.persistPlaybackMode = _collection.persistPlaybackMode;
-    _player.persistVolume = _collection.persistVolume;
-    _player.persistPlaybackSession = _collection.persistPlaybackSession;
-    _player.clearPlaybackSession = _collection.clearPlaybackSession;
+    _bootstrapping = _ownsCollection || _ownsPlayer;
     unawaited(_bootstrap());
   }
 
   Future<void> _bootstrap() async {
-    // 生产路径自建 controller，需要先加载 FRB；测试注入 fake 时跳过。
-    if (_ownsCollection || _ownsPlayer) {
+    // 测试注入 fake 时跳过 Rust 初始化。
+    if (!_ownsCollection && !_ownsPlayer) {
+      return;
+    }
+
+    if (mounted && !_bootstrapping) {
+      setState(() {
+        _bootstrapping = true;
+        _bootstrapError = null;
+      });
+    }
+    try {
       await RustLib.init();
       setup();
-    }
-    if (!mounted) {
-      return;
-    }
-
-    final playerReady = _player.ensureReady();
-    await _collection.load();
-    if (!mounted) {
-      return;
-    }
-
-    await playerReady;
-    if (!mounted) {
-      return;
-    }
-
-    // 先顺序读完 meta（音量/模式/会话），再异步补封面。
-    // 连接池已支持并发库操作；此处顺序加载仍作防御性编排，避免启动路径竞态。
-    try {
-      final volume = await _collection.loadVolume();
+      final (app, snapshot) = await App.bootstrap();
       if (!mounted) {
+        app.shutdown();
+        app.dispose();
         return;
       }
-      _player.setVolume(volume, persist: false);
-    } catch (err, stack) {
-      // 音量恢复失败时保持默认。
-      debugPrint('bootstrap: loadVolume failed: $err\n$stack');
-    }
-
-    try {
-      final mode = await _collection.loadPlaybackMode();
-      if (!mounted) {
-        return;
-      }
-      _player.setPlaybackMode(mode, persist: false);
-    } catch (err, stack) {
-      // 曲库已加载；模式恢复失败时保持默认顺序播放。
-      debugPrint('bootstrap: loadPlaybackMode failed: $err\n$stack');
-    }
-
-    try {
-      final session = await _collection.loadPlaybackSession();
-      if (!mounted || session == null) {
-        unawaited(_collection.hydrateCovers());
-        return;
-      }
-      await _restoreSession(session);
-    } catch (err, stack) {
-      // 会话恢复失败时保持空闲，不打断启动。
-      debugPrint('bootstrap: loadPlaybackSession failed: $err\n$stack');
-    }
-
-    unawaited(_collection.hydrateCovers());
-  }
-
-  Future<void> _restoreSession(PlaybackSession session) async {
-    Playlist? playlist;
-    for (final candidate in _collection.playlists) {
-      if (candidate.id == session.playlistId) {
-        playlist = candidate;
-        break;
-      }
-    }
-    if (playlist == null) {
-      await _collection.clearPlaybackSession();
-      return;
-    }
-
-    final paths = playlist.songs.map((song) => song.path).toList();
-    final index = paths.indexOf(session.path);
-    if (index < 0) {
-      await _collection.clearPlaybackSession();
-      return;
-    }
-
-    // 恢复过程不要把 position 写成 0 覆盖库里的会话。
-    final persistSession = _player.persistPlaybackSession;
-    final clearSession = _player.clearPlaybackSession;
-    _player.persistPlaybackSession = null;
-    _player.clearPlaybackSession = null;
-    try {
-      _player.setQueue(
-        paths: paths,
-        startIndex: BigInt.from(index),
-        autoplay: false,
-        playlistId: playlist.id,
+      _app = app;
+      _collection.attach(
+        app,
+        initial: snapshot.library_,
+        selectedPlaylistId: snapshot.selectedPlaylistId,
       );
-      _player.seek(session.positionMs);
-      _collection.selectPlaylist(playlist.id);
-    } finally {
-      _player.persistPlaybackSession = persistSession;
-      _player.clearPlaybackSession = clearSession;
+      _player.attach(app, initial: snapshot.player);
+      if (mounted) {
+        setState(() {
+          _bootstrapping = false;
+          _bootstrapError = null;
+        });
+      }
+    } catch (err, stack) {
+      debugPrint('bootstrap failed: $err\n$stack');
+      final app = _app;
+      _app = null;
+      if (app != null) {
+        app.shutdown();
+        app.dispose();
+      }
+      if (mounted) {
+        setState(() {
+          _bootstrapping = false;
+          _bootstrapError = err;
+        });
+      }
     }
   }
 
   void _flushPersist() {
-    _player.flushVolumePersist();
-    _player.persistCurrentSession();
+    _player.flush();
   }
 
   @override
@@ -170,6 +120,12 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     if (_ownsCollection) {
       _collection.dispose();
     }
+    final app = _app;
+    _app = null;
+    if (app != null) {
+      app.shutdown();
+      app.dispose();
+    }
     super.dispose();
   }
 
@@ -185,6 +141,48 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         theme: StrawberryCream.theme(),
         routerConfig: _router,
+        builder: (context, child) {
+          if (_bootstrapping) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final error = _bootstrapError;
+          if (error != null) {
+            return Scaffold(
+              body: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline_rounded, size: 48),
+                        const SizedBox(height: 16),
+                        const Text('Mofu 启动失败'),
+                        const SizedBox(height: 8),
+                        Text(
+                          error.toString(),
+                          textAlign: TextAlign.center,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          onPressed: _bootstrap,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('重试'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+          return child ?? const SizedBox.shrink();
+        },
       ),
     );
   }

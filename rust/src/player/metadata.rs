@@ -66,6 +66,42 @@ pub struct TrackMetadata {
 }
 
 impl TrackMetadata {
+    /// Display title with path basename fallback when the tag is missing/blank.
+    pub fn display_title(path: &str, title: Option<&str>) -> String {
+        if let Some(title) = title {
+            let trimmed = title.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_owned();
+            }
+        }
+        Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .unwrap_or("未知曲目")
+            .to_owned()
+    }
+
+    /// Index of the active timed lyric line at `position_ms`, if any.
+    pub fn active_lyrics_line_index(&self, position_ms: u64) -> Option<usize> {
+        let lines = self
+            .lyrics
+            .iter()
+            .find_map(|lyrics| match &lyrics.content {
+                LyricsContent::Timed { lines } if !lines.is_empty() => Some(lines.as_slice()),
+                _ => None,
+            })?;
+        let mut active = 0usize;
+        for (index, line) in lines.iter().enumerate() {
+            if line.start_ms <= position_ms {
+                active = index;
+            } else {
+                break;
+            }
+        }
+        Some(active)
+    }
+
     /// Keep the first non-empty assignment for a single-valued text field.
     pub(crate) fn set_text_if_empty(slot: &mut Option<String>, value: String) {
         if slot.is_none() && !value.is_empty() {
@@ -329,5 +365,47 @@ mod tests {
         assert_eq!(timed.lyrics.len(), 1);
         assert_eq!(timed.lyrics[0].source, LyricsSource::Embedded);
         fs::remove_dir_all(directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn display_title_prefers_tag_then_basename() {
+        assert_eq!(
+            TrackMetadata::display_title("/music/a.mp3", Some("  标题  ")),
+            "标题"
+        );
+        assert_eq!(
+            TrackMetadata::display_title("/music/a.mp3", Some("   ")),
+            "a.mp3"
+        );
+        assert_eq!(TrackMetadata::display_title("/music/a.mp3", None), "a.mp3");
+    }
+
+    #[test]
+    fn active_lyrics_line_tracks_position() {
+        let metadata = TrackMetadata {
+            lyrics: vec![Lyrics {
+                source: LyricsSource::Embedded,
+                language: None,
+                description: None,
+                content: LyricsContent::Timed {
+                    lines: vec![
+                        LyricsLine {
+                            start_ms: 0,
+                            end_ms: Some(1000),
+                            text: "a".into(),
+                        },
+                        LyricsLine {
+                            start_ms: 1000,
+                            end_ms: Some(2000),
+                            text: "b".into(),
+                        },
+                    ],
+                },
+            }],
+            ..Default::default()
+        };
+        assert_eq!(metadata.active_lyrics_line_index(0), Some(0));
+        assert_eq!(metadata.active_lyrics_line_index(1500), Some(1));
+        assert_eq!(TrackMetadata::default().active_lyrics_line_index(0), None);
     }
 }

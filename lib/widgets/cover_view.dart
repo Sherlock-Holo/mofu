@@ -34,13 +34,13 @@ class CoverView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ??
-        BorderRadius.circular(
-          circular ? size / 2 : StrawberryCream.radiusSm,
-        );
+    final radius =
+        borderRadius ??
+        BorderRadius.circular(circular ? size / 2 : StrawberryCream.radiusSm);
     final image = _bytes;
-    final cachePx =
-        (size * MediaQuery.devicePixelRatioOf(context)).round().clamp(1, 4096);
+    final cachePx = (size * MediaQuery.devicePixelRatioOf(context))
+        .round()
+        .clamp(1, 4096);
 
     Widget child;
     if (image != null) {
@@ -73,8 +73,9 @@ class CoverView extends StatelessWidget {
 
   Widget _placeholder(double size) {
     return DecoratedBox(
-      decoration:
-          const BoxDecoration(gradient: StrawberryCream.coverPlaceholder),
+      decoration: const BoxDecoration(
+        gradient: StrawberryCream.coverPlaceholder,
+      ),
       child: Center(
         child: Icon(
           Icons.music_note_rounded,
@@ -130,16 +131,15 @@ class BlurCoverBackground extends StatelessWidget {
                 cacheHeight: cacheHeight,
                 gaplessPlayback: true,
                 errorBuilder: (_, _, _) =>
-                const ColoredBox(
-                  color: StrawberryCream.creamDeep,
-                ),
+                    const ColoredBox(color: StrawberryCream.creamDeep),
               ),
             ),
           )
         else
           const DecoratedBox(
-            decoration:
-                BoxDecoration(gradient: StrawberryCream.coverPlaceholder),
+            decoration: BoxDecoration(
+              gradient: StrawberryCream.coverPlaceholder,
+            ),
           ),
         DecoratedBox(
           decoration: BoxDecoration(

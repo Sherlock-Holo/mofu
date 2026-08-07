@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use crossbeam_channel::{Receiver, RecvTimeoutError, TryRecvError};
+use flume::{Receiver, RecvTimeoutError, TryRecvError};
 use tracing::{error, warn};
 
 use super::command::PlayerCommand;
@@ -268,6 +268,7 @@ impl DecodeWorker {
         match active.seek(position) {
             Ok(position_ms) => {
                 self.progress.set_position_ms(position_ms);
+                self.progress.notify_change();
                 // Seeking out of Ended returns to a paused media, not idle.
                 if self.progress.state() == PlaybackState::Ended {
                     self.progress.set_state(PlaybackState::Paused);

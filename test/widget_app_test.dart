@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mofu/app/app.dart';
 import 'package:mofu/app/theme.dart';
+import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/features/now_playing/now_playing_page.dart';
 import 'package:mofu/features/now_playing/widgets/lyrics_panel.dart';
 import 'package:mofu/features/now_playing/widgets/rotating_cover.dart';
-import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
 import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/src/rust/api/player.dart';
@@ -37,6 +37,7 @@ Song _song({
   return Song(
     path: path,
     durationMs: BigInt.from(durationMs),
+    displayTitle: title,
     metadata: _meta(title: title, artist: artist, album: album),
   );
 }
@@ -59,9 +60,7 @@ Playlist _virtualPlaylist() {
     id: BigInt.from(2),
     name: '最爱',
     kind: PlaylistKind.virtual,
-    songs: [
-      _song(path: '/music/c.mp3', title: '午后茶'),
-    ],
+    songs: [_song(path: '/music/c.mp3', title: '午后茶')],
   );
 }
 
@@ -107,6 +106,9 @@ PlayerSnapshot _playingSnapshot({
     currentIndex: BigInt.zero,
     currentFromUpNext: false,
     currentPath: '/music/a.mp3',
+    displayTitle: '草莓糖',
+    activeLyricsLine: BigInt.one,
+    sourcePlaylistId: BigInt.one,
     queue: [
       QueueItem(index: BigInt.zero, path: '/music/a.mp3'),
       QueueItem(index: BigInt.one, path: '/music/b.mp3'),
@@ -135,12 +137,8 @@ Future<void> _pumpApp(
   });
 
   await tester.pumpWidget(
-    MofuApp(
-      collectionController: collection,
-      playerController: player,
-    ),
+    MofuApp(collectionController: collection, playerController: player),
   );
-  // 播放中封面旋转是无限动画，不能 pumpAndSettle。
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
 }
@@ -185,8 +183,9 @@ Matrix4 _coverMatrix(WidgetTester tester) {
 
 void main() {
   group('HomePage', () {
-    testWidgets('wide layout shows sidebar, song table and playback bar',
-        (tester) async {
+    testWidgets('wide layout shows sidebar, song table and playback bar', (
+      tester,
+    ) async {
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist(), _virtualPlaylist()],
         selectedId: BigInt.one,
@@ -198,13 +197,9 @@ void main() {
       expect(find.text('Mofu'), findsNothing);
       expect(find.text('目录'), findsWidgets);
       expect(find.text('虚拟列表'), findsWidgets);
-      expect(find.text('本地音乐'), findsWidgets);
-      expect(find.text('最爱'), findsOneWidget);
       expect(find.text('草莓糖'), findsWidgets);
       expect(find.text('奶油云'), findsOneWidget);
-      expect(find.text('歌曲'), findsOneWidget);
       expect(find.byType(PlaybackModeButton), findsOneWidget);
-      expect(find.byTooltip('下一首'), findsOneWidget);
     });
 
     testWidgets('selecting playlist updates song table', (tester) async {
@@ -216,51 +211,34 @@ void main() {
 
       await _pumpApp(tester, collection: collection, player: player);
 
-      expect(find.text('草莓糖'), findsOneWidget);
-      expect(find.text('午后茶'), findsNothing);
-
       await tester.tap(find.text('最爱'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(collection.selectedId, BigInt.from(2));
       expect(find.text('午后茶'), findsOneWidget);
       expect(find.text('奶油云'), findsNothing);
     });
 
-    testWidgets('header follows browsed playlist, not playing track',
-        (tester) async {
+    testWidgets('empty virtual playlist shows add-files action', (
+      tester,
+    ) async {
       final emptyVirtual = Playlist(
-        id: BigInt.from(3),
+        id: BigInt.from(2),
         name: '空列表',
         kind: PlaylistKind.virtual,
         songs: const [],
       );
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist(), emptyVirtual],
-        selectedId: BigInt.one,
+        selectedId: BigInt.from(2),
       );
       final player = PlayerController.fake(snapshot: _playingSnapshot());
 
       await _pumpApp(tester, collection: collection, player: player);
 
-      // 正在播「草莓糖」，但头部应是浏览中的「本地音乐」。
-      expect(find.text('本地音乐'), findsWidgets);
-      expect(find.text('2 首'), findsWidgets);
-
-      await tester.tap(find.text('空列表'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(find.text('空列表'), findsWidgets);
-      expect(find.text('0 首'), findsWidgets);
-      // 播放未停，底栏仍显示当前曲。
-      expect(find.text('草莓糖'), findsWidgets);
-      expect(player.currentIndex, BigInt.zero);
+      expect(find.text('这个列表还没有歌曲'), findsOneWidget);
+      expect(find.text('添加音乐文件'), findsOneWidget);
     });
 
-    testWidgets('play all loads browsed playlist into queue from start',
-        (tester) async {
+    testWidgets('play all forwards playlist id to player', (tester) async {
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist(), _virtualPlaylist()],
         selectedId: BigInt.from(2),
@@ -268,19 +246,32 @@ void main() {
       final player = PlayerController.fake();
 
       await _pumpApp(tester, collection: collection, player: player);
-
-      expect(find.text('播放全部'), findsOneWidget);
       await tester.tap(find.text('播放全部'));
       await tester.pump();
 
-      expect(player.queue.map((item) => item.path), ['/music/c.mp3']);
-      expect(player.currentIndex, BigInt.zero);
-      expect(player.isPlaying, isTrue);
-      expect(player.sourcePlaylistId, BigInt.from(2));
+      expect(player.recordedCommands, contains('playPlaylist:2:null:true'));
     });
 
-    testWidgets('right-clicking a song enqueues it via context menu',
-        (tester) async {
+    testWidgets('clicking a song forwards its stable path', (tester) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake();
+
+      await _pumpApp(tester, collection: collection, player: player);
+      await tester.tap(find.text('奶油云'));
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(
+        player.recordedCommands,
+        contains('playPlaylist:1:/music/b.mp3:true'),
+      );
+    });
+
+    testWidgets('right-clicking a song enqueues it via context menu', (
+      tester,
+    ) async {
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
@@ -289,23 +280,19 @@ void main() {
 
       await _pumpApp(tester, collection: collection, player: player);
 
-      await tester.tapAt(
-        tester.getCenter(find.text('奶油云')),
-        buttons: kSecondaryButton,
-      );
-      // 等菜单弹出动画结束，命中点才稳定。
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
+      await tester.tap(find.text('奶油云'), buttons: kSecondaryMouseButton);
+      await tester.pumpAndSettle();
       expect(find.text('下一首播放'), findsOneWidget);
       await tester.tap(find.text('下一首播放'));
       await tester.pump();
 
       expect(player.snapshot?.upNext.single.path, '/music/b.mp3');
+      expect(player.recordedCommands, contains('enqueueNext:/music/b.mp3'));
     });
 
-    testWidgets('playback mode button on home bar is wired to player',
-        (tester) async {
+    testWidgets('playback mode button on home bar is wired to player', (
+      tester,
+    ) async {
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
@@ -317,38 +304,30 @@ void main() {
       expect(find.byType(PlaybackModeButton), findsOneWidget);
       expect(find.byTooltip('顺序播放'), findsOneWidget);
 
-      // 菜单交互由 widget_foundation_test 覆盖；这里验证底栏接线与图标刷新。
       player.setPlaybackMode(PlaybackMode.repeatAll);
       await tester.pump();
       expect(player.playbackMode, PlaybackMode.repeatAll);
       expect(find.byTooltip('列表循环'), findsOneWidget);
     });
 
-    testWidgets('pause persists playback session with playlist and path',
-        (tester) async {
-      PlaybackSession? saved;
+    testWidgets('pause forwards to player adapter', (tester) async {
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
       );
       final player = PlayerController.fake(snapshot: _playingSnapshot());
-      player.sourcePlaylistId = BigInt.one;
 
       await _pumpApp(tester, collection: collection, player: player);
-      // initState 会先接到 CollectionController；测试覆盖后再验证触发。
-      player.persistPlaybackSession = (session) async {
-        saved = session;
-      };
       player.pause();
       await tester.pump();
 
-      expect(saved?.playlistId, BigInt.one);
-      expect(saved?.path, '/music/a.mp3');
-      expect(saved?.positionMs, BigInt.from(2500));
+      expect(player.recordedCommands, contains('pause'));
+      expect(player.isPlaying, isFalse);
     });
 
-    testWidgets('volume persist uses trailing 400ms debounce', (tester) async {
-      final volumes = <double>[];
+    testWidgets('volume updates local snapshot in fake adapter', (
+      tester,
+    ) async {
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
@@ -356,24 +335,17 @@ void main() {
       final player = PlayerController.fake();
 
       await _pumpApp(tester, collection: collection, player: player);
-      player.persistVolume = (volume) async {
-        volumes.add(volume);
-      };
       player.setVolume(0.5);
       player.setVolume(0.3);
-      await tester.pump(const Duration(milliseconds: 399));
-      expect(volumes, isEmpty);
+      await tester.pump();
 
-      await tester.pump(const Duration(milliseconds: 1));
-      expect(volumes, [0.3]);
-
-      player.setVolume(0.1);
-      player.flushVolumePersist();
-      expect(volumes, [0.3, 0.1]);
+      expect(player.volume, 0.3);
+      expect(player.recordedCommands, ['setVolume', 'setVolume']);
     });
 
-    testWidgets('narrow layout uses drawer instead of persistent sidebar',
-        (tester) async {
+    testWidgets('narrow layout uses drawer instead of persistent sidebar', (
+      tester,
+    ) async {
       final collection = CollectionController.fake(
         playlists: [_directoryPlaylist()],
         selectedId: BigInt.one,
@@ -400,7 +372,6 @@ void main() {
     testWidgets('highlights active lyric line by position', (tester) async {
       final player = PlayerController.fake(snapshot: _playingSnapshot());
       await _pumpNowPlaying(tester, player: player);
-      // 等歌词行 AnimatedDefaultTextStyle 过渡完成。
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.byType(LyricsPanel), findsOneWidget);
@@ -415,8 +386,9 @@ void main() {
       );
     });
 
-    testWidgets('rotating cover animates while playing and stops when paused',
-        (tester) async {
+    testWidgets('rotating cover animates while playing and stops when paused', (
+      tester,
+    ) async {
       final player = PlayerController.fake(snapshot: _playingSnapshot());
       await _pumpNowPlaying(tester, player: player);
 

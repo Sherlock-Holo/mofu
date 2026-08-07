@@ -7,13 +7,9 @@ use crate::player::metadata::{
     TrackMetadata as DomainTrackMetadata,
 };
 use crate::player::{
-    PlaybackMode as DomainPlaybackMode, PlaybackState, Player as DomainPlayer, PlayerError,
+    PlaybackMode as DomainPlaybackMode, PlaybackState, Player as DomainPlayer,
     PlayerSnapshot as DomainPlayerSnapshot, QueuePosition as DomainQueuePosition,
 };
-
-fn map_err(err: PlayerError) -> String {
-    err.to_string()
-}
 
 /// FFI handle for a local music player instance.
 #[flutter_rust_bridge::frb(opaque)]
@@ -33,25 +29,25 @@ impl Player {
     /// Open a local audio file. Does not start playback.
     #[flutter_rust_bridge::frb(sync)]
     pub fn open(&self, path: String) -> Result<(), String> {
-        self.inner.open(path.into()).map_err(map_err)
+        self.inner.open(path.into()).map_err(|err| err.to_string())
     }
 
     /// Start or resume playback.
     #[flutter_rust_bridge::frb(sync)]
     pub fn play(&self) -> Result<(), String> {
-        self.inner.play().map_err(map_err)
+        self.inner.play().map_err(|err| err.to_string())
     }
 
     /// Pause playback.
     #[flutter_rust_bridge::frb(sync)]
     pub fn pause(&self) -> Result<(), String> {
-        self.inner.pause().map_err(map_err)
+        self.inner.pause().map_err(|err| err.to_string())
     }
 
     /// Stop playback and close the current media.
     #[flutter_rust_bridge::frb(sync)]
     pub fn stop(&self) -> Result<(), String> {
-        self.inner.stop().map_err(map_err)
+        self.inner.stop().map_err(|err| err.to_string())
     }
 
     /// Seek to an absolute position in milliseconds.
@@ -59,13 +55,15 @@ impl Player {
     pub fn seek(&self, position_ms: u64) -> Result<(), String> {
         self.inner
             .seek(Duration::from_millis(position_ms))
-            .map_err(map_err)
+            .map_err(|err| err.to_string())
     }
 
     /// Seek backward or forward from the current position.
     #[flutter_rust_bridge::frb(sync)]
     pub fn seek_relative(&self, delta_ms: i64) -> Result<(), String> {
-        self.inner.seek_relative(delta_ms).map_err(map_err)
+        self.inner
+            .seek_relative(delta_ms)
+            .map_err(|err| err.to_string())
     }
 
     /// Replace the playback queue and optionally prepare/start one item.
@@ -86,44 +84,50 @@ impl Player {
                 start_index,
                 autoplay,
             )
-            .map_err(map_err)
+            .map_err(|err| err.to_string())
     }
 
     /// Select and start one queue item.
     #[flutter_rust_bridge::frb(sync)]
     pub fn play_index(&self, index: u64) -> Result<(), String> {
         let index = usize::try_from(index).map_err(|err| err.to_string())?;
-        self.inner.play_index(index).map_err(map_err)
+        self.inner.play_index(index).map_err(|err| err.to_string())
     }
 
     /// Queue a track to play after the current one (up-next queue).
     #[flutter_rust_bridge::frb(sync)]
     pub fn enqueue_next(&self, path: String) -> Result<(), String> {
-        self.inner.enqueue_next(path.into()).map_err(map_err)
+        self.inner
+            .enqueue_next(path.into())
+            .map_err(|err| err.to_string())
     }
 
     /// Start the next queue item when available.
     #[flutter_rust_bridge::frb(sync)]
     pub fn next(&self) -> Result<(), String> {
-        self.inner.next().map_err(map_err)
+        self.inner.next().map_err(|err| err.to_string())
     }
 
     /// Start the previous queue item when available.
     #[flutter_rust_bridge::frb(sync)]
     pub fn previous(&self) -> Result<(), String> {
-        self.inner.previous().map_err(map_err)
+        self.inner.previous().map_err(|err| err.to_string())
     }
 
     /// Set output volume. Values outside 0–1 are clamped.
     #[flutter_rust_bridge::frb(sync)]
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
-        self.inner.set_volume(volume as f32).map_err(map_err)
+        self.inner
+            .set_volume(volume as f32)
+            .map_err(|err| err.to_string())
     }
 
     /// Set queue navigation behavior.
     #[flutter_rust_bridge::frb(sync)]
     pub fn set_playback_mode(&self, mode: PlaybackMode) -> Result<(), String> {
-        self.inner.set_playback_mode(mode.into()).map_err(map_err)
+        self.inner
+            .set_playback_mode(mode.into())
+            .map_err(|err| err.to_string())
     }
 
     /// Unified playback, queue, volume, and metadata snapshot.
@@ -318,6 +322,12 @@ pub struct PlayerSnapshot {
     pub current_from_up_next: bool,
     /// Path of the current track; `None` when idle.
     pub current_path: Option<String>,
+    /// Resolved title for the current track (tag or basename).
+    pub display_title: Option<String>,
+    /// Active timed lyric line index for `position_ms`, when available.
+    pub active_lyrics_line: Option<u64>,
+    /// Playlist that sourced the current main queue, when known.
+    pub source_playlist_id: Option<u64>,
     /// Main queue in play order (shuffled when `playback_mode` is shuffle).
     pub queue: Vec<QueueItem>,
     /// Manually queued tracks, in play order.
@@ -426,8 +436,23 @@ impl From<DomainPlayerSnapshot> for PlayerSnapshot {
         let current_path = queue
             .current_path()
             .map(|path| path.to_string_lossy().into_owned());
+        let position_ms = value.position.as_millis() as u64;
+        let display_title = current_path.as_ref().map(|path| {
+            DomainTrackMetadata::display_title(
+                path,
+                value
+                    .metadata
+                    .as_ref()
+                    .and_then(|meta| meta.title.as_deref()),
+            )
+        });
+        let active_lyrics_line = value
+            .metadata
+            .as_ref()
+            .and_then(|meta| meta.active_lyrics_line_index(position_ms))
+            .map(|index| index as u64);
         Self {
-            position_ms: value.position.as_millis() as u64,
+            position_ms,
             duration_ms: value.duration.as_millis() as u64,
             state: value.state.into(),
             volume: f64::from(value.volume),
@@ -435,6 +460,9 @@ impl From<DomainPlayerSnapshot> for PlayerSnapshot {
             current_index,
             current_from_up_next,
             current_path,
+            display_title,
+            active_lyrics_line,
+            source_playlist_id: None,
             queue: QueueItem::list_from(queue.main_paths),
             up_next: QueueItem::list_from(queue.up_next_paths),
             metadata: value.metadata.as_ref().map(TrackMetadata::from),

@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 
 use backend::MediaSessionBackend;
 use cover_file::CoverFileCache;
-use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use event::{MappedCommand, MediaSessionEvent, SessionMetadata, SessionPlayback};
+use flume::{Receiver, RecvTimeoutError, Sender, TryRecvError};
 use souvlaki_backend::SouvlakiBackend;
 use tracing::warn;
 
@@ -54,7 +54,7 @@ impl MediaSession {
             return None;
         }
 
-        let (shutdown_tx, shutdown_rx) = crossbeam_channel::bounded(1);
+        let (shutdown_tx, shutdown_rx) = flume::bounded(1);
         let sync_thread = thread::Builder::new()
             .name("mofu-media-session".into())
             .spawn(move || {
@@ -102,8 +102,8 @@ impl MediaSession {
     }
 
     fn fire(cmd_tx: &Sender<PlayerCommand>, command: impl FnOnce(CommandReply) -> PlayerCommand) {
-        let (reply_tx, _reply_rx) = crossbeam_channel::bounded(1);
-        let _ = cmd_tx.send(command(reply_tx));
+        let (reply_tx, _reply_rx) = flume::bounded(1);
+        let _ = cmd_tx.try_send(command(reply_tx));
     }
 
     fn run_sync_loop(
@@ -186,8 +186,8 @@ impl MediaSession {
             }
 
             match shutdown_rx.recv_timeout(SYNC_INTERVAL) {
-                Ok(()) | Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
-                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+                Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
+                Err(RecvTimeoutError::Timeout) => {}
             }
         }
 
@@ -269,8 +269,9 @@ mod tests {
 
     #[test]
     fn try_attach_does_not_panic() {
-        let (cmd_tx, _cmd_rx) = crossbeam_channel::bounded::<PlayerCommand>(8);
-        let progress = Arc::new(SharedProgress::new());
+        let (cmd_tx, _cmd_rx) = flume::bounded::<PlayerCommand>(8);
+        let (progress, _notify) = SharedProgress::new();
+        let progress = Arc::new(progress);
         // Soft-fail is fine (e.g. no session bus); must not panic.
         let _session = MediaSession::try_attach(cmd_tx, progress);
     }

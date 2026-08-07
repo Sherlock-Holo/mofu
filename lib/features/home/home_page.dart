@@ -41,10 +41,15 @@ class HomePage extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               trailing: TextButton(
-                onPressed: () {
-                  // 错误在下次成功操作时清除；这里触发一次刷新。
-                  collection.load();
-                },
+                onPressed: collection.loading
+                    ? null
+                    : () {
+                        if (collection.error != null) {
+                          collection.retryLastError();
+                        } else {
+                          context.read<PlayerController>().retryLastError();
+                        }
+                      },
                 child: const Text('重试'),
               ),
             ),

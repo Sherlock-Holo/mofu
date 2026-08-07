@@ -784,7 +784,7 @@ mod tests {
 
     #[test]
     fn serialization_retries_until_success() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let mut attempts = 0_usize;
             let result = with_serialization_retries(async || {
                 attempts += 1;
@@ -804,7 +804,7 @@ mod tests {
 
     #[test]
     fn serialization_retries_exhaust_and_return_error() {
-        futures_executor::block_on(async {
+        async_global_executor::block_on(async {
             let mut attempts = 0_usize;
             let result = with_serialization_retries(async || {
                 attempts += 1;

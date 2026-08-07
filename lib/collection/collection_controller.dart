@@ -1,38 +1,33 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:mofu/src/rust/api/app.dart';
 import 'package:mofu/src/rust/api/collection.dart';
-import 'package:mofu/src/rust/api/file_dialog.dart';
-import 'package:mofu/src/rust/api/player.dart'
-    show CoverArt, PlaybackMode, TrackMetadata;
 
-/// 曲库列表状态与目录/文件导入动作。
+/// Thin UI adapter: holds selection state and forwards library commands to Rust.
 class CollectionController extends ChangeNotifier {
-  CollectionController({Collection? collection})
-      : _collection = collection,
-        _ownsCollection = collection == null,
-        _fake = false;
+  CollectionController() : _fake = false;
 
-  /// 不连接 Rust，供 Widget 与 integration 测试注入。
   @visibleForTesting
   CollectionController.fake({
     List<Playlist> playlists = const [],
-    this._selectedId,
-  })  : _collection = null,
-        _ownsCollection = false,
-        _fake = true,
+    BigInt? selectedId,
+  }) : _fake = true,
        _playlists = List<Playlist>.unmodifiable(playlists) {
+    _selectedId = selectedId;
     _ensureSelection();
   }
 
-  Collection? _collection;
-  final bool _ownsCollection;
+  App? _app;
+  StreamSubscription<LibrarySnapshot>? _subscription;
   final bool _fake;
 
   List<Playlist> _playlists = const [];
   BigInt? _selectedId;
   bool _loading = false;
   String? _error;
+  VoidCallback? _retry;
+  bool _disposed = false;
 
   List<Playlist> get playlists => _playlists;
   BigInt? get selectedId => _selectedId;
@@ -52,15 +47,66 @@ class CollectionController extends ChangeNotifier {
     return null;
   }
 
-  List<Playlist> get directoryPlaylists =>
-      _playlists.where((p) => p.kind == PlaylistKind.directory).toList();
+  List<Playlist> get directoryPlaylists => [
+    for (final playlist in _playlists)
+      if (playlist.kind == PlaylistKind.directory) playlist,
+  ];
 
-  List<Playlist> get virtualPlaylists =>
-      _playlists.where((p) => p.kind == PlaylistKind.virtual).toList();
+  List<Playlist> get virtualPlaylists => [
+    for (final playlist in _playlists)
+      if (playlist.kind == PlaylistKind.virtual) playlist,
+  ];
 
-  /// 测试用：替换曲库快照。
+  /// Bind to the shared Rust [App] and start the library stream.
+  void attach(App app, {LibrarySnapshot? initial, BigInt? selectedPlaylistId}) {
+    if (_fake || _disposed) {
+      return;
+    }
+    _app = app;
+    if (initial != null) {
+      _playlists = List<Playlist>.unmodifiable(initial.playlists);
+    }
+    if (selectedPlaylistId != null) {
+      _selectedId = selectedPlaylistId;
+    }
+    _ensureSelection();
+    _subscribe();
+    notifyListeners();
+  }
+
+  void _subscribe() {
+    final app = _app;
+    if (app == null || _disposed) {
+      return;
+    }
+    unawaited(_subscription?.cancel());
+    _subscription = app.watchLibrary().listen(
+      (snapshot) {
+        if (_disposed) {
+          return;
+        }
+        _playlists = List<Playlist>.unmodifiable(snapshot.playlists);
+        _ensureSelection();
+        _error = null;
+        _retry = null;
+        notifyListeners();
+      },
+      onError: (Object err) {
+        if (_disposed) {
+          return;
+        }
+        _error = err.toString();
+        _retry = _subscribe;
+        notifyListeners();
+      },
+    );
+  }
+
   @visibleForTesting
   void emitPlaylists(List<Playlist> playlists, {BigInt? selectedId}) {
+    if (_disposed) {
+      return;
+    }
     _playlists = List<Playlist>.unmodifiable(playlists);
     if (selectedId != null) {
       _selectedId = selectedId;
@@ -70,179 +116,10 @@ class CollectionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Collection> _requireCollection() async {
-    return _collection ??= await Collection.newInstance();
-  }
-
-  /// 单次 FFI 封面批量上限，避免巨大同步 payload。
-  static const int _coverHydrateChunkSize = 32;
-
-  Future<void> load() async {
-    if (_fake) {
-      _loading = false;
-      _error = null;
-      _ensureSelection();
-      notifyListeners();
-      return;
-    }
-    _loading = true;
-    _error = null;
-    notifyListeners();
-    try {
-      final collection = await _requireCollection();
-      _playlists = await collection.playlists();
-      _ensureSelection();
-    } catch (err) {
-      _error = err.toString();
-    } finally {
-      _loading = false;
-      notifyListeners();
-    }
-    if (_error == null) {
-      unawaited(hydrateCovers());
-    }
-  }
-
-  /// 在 lite 歌单已展示后，按 path 分块补封面。
-  Future<void> hydrateCovers() async {
-    if (_fake || _playlists.isEmpty) {
-      return;
-    }
-    final paths = <String>[
-      for (final playlist in _playlists)
-        for (final song in playlist.songs)
-          if (song.metadata.cover == null) song.path,
-    ];
-    if (paths.isEmpty) {
-      return;
-    }
-    try {
-      final collection = await _requireCollection();
-      final byPath = <String, CoverArt>{};
-      for (var i = 0; i < paths.length; i += _coverHydrateChunkSize) {
-        final end = (i + _coverHydrateChunkSize).clamp(0, paths.length);
-        final chunk = paths.sublist(i, end);
-        final covers = await collection.coversForPaths(paths: chunk);
-        for (final item in covers) {
-          byPath[item.path] = item.cover;
-        }
-      }
-      if (byPath.isEmpty) {
-        return;
-      }
-      _playlists = [
-        for (final playlist in _playlists)
-          Playlist(
-            id: playlist.id,
-            name: playlist.name,
-            kind: playlist.kind,
-            directoryPath: playlist.directoryPath,
-            songs: [
-              for (final song in playlist.songs)
-                _songWithCover(song, byPath[song.path]),
-            ],
-          ),
-      ];
-      notifyListeners();
-    } catch (_) {
-      // 封面补全失败不影响列表文字；保留 placeholder。
-    }
-  }
-
-  Song _songWithCover(Song song, CoverArt? cover) {
-    if (cover == null) {
-      return song;
-    }
-    final meta = song.metadata;
-    return Song(
-      path: song.path,
-      durationMs: song.durationMs,
-      metadata: TrackMetadata(
-        title: meta.title,
-        artist: meta.artist,
-        album: meta.album,
-        albumArtist: meta.albumArtist,
-        composer: meta.composer,
-        lyricist: meta.lyricist,
-        performer: meta.performer,
-        genre: meta.genre,
-        comment: meta.comment,
-        date: meta.date,
-        year: meta.year,
-        trackNumber: meta.trackNumber,
-        trackTotal: meta.trackTotal,
-        discNumber: meta.discNumber,
-        discTotal: meta.discTotal,
-        cover: cover,
-        lyrics: meta.lyrics,
-      ),
-    );
-  }
-
-  /// 读取持久化的播放模式；缺省为顺序播放。
-  Future<PlaybackMode> loadPlaybackMode() async {
-    if (_fake) {
-      return PlaybackMode.sequential;
-    }
-    final collection = await _requireCollection();
-    return collection.playbackMode();
-  }
-
-  /// 将播放模式写入 catalog.db。
-  Future<void> persistPlaybackMode(PlaybackMode mode) async {
-    if (_fake) {
-      return;
-    }
-    final collection = await _requireCollection();
-    await collection.setPlaybackMode(mode: mode);
-  }
-
-  /// 读取持久化音量；缺省为 `1.0`。
-  Future<double> loadVolume() async {
-    if (_fake) {
-      return 1;
-    }
-    final collection = await _requireCollection();
-    return collection.volume();
-  }
-
-  /// 将音量写入 catalog.db（已在 Rust 侧 clamp 到 `[0, 1]`）。
-  Future<void> persistVolume(double volume) async {
-    if (_fake) {
-      return;
-    }
-    final collection = await _requireCollection();
-    await collection.setVolume(volume: volume);
-  }
-
-  /// 读取持久化播放会话；无会话时为 null。
-  Future<PlaybackSession?> loadPlaybackSession() async {
-    if (_fake) {
-      return null;
-    }
-    final collection = await _requireCollection();
-    return collection.playbackSession();
-  }
-
-  /// 将当前播放会话写入 catalog.db。
-  Future<void> persistPlaybackSession(PlaybackSession session) async {
-    if (_fake) {
-      return;
-    }
-    final collection = await _requireCollection();
-    await collection.setPlaybackSession(session: session);
-  }
-
-  /// 清除持久化播放会话。
-  Future<void> clearPlaybackSession() async {
-    if (_fake) {
-      return;
-    }
-    final collection = await _requireCollection();
-    await collection.clearPlaybackSession();
-  }
-
   void selectPlaylist(BigInt id) {
+    if (_disposed) {
+      return;
+    }
     _selectedId = id;
     notifyListeners();
   }
@@ -259,25 +136,34 @@ class CollectionController extends ChangeNotifier {
     _selectedId = _playlists.first.id;
   }
 
-  Future<void> _mutate(Future<void> Function() action) async {
+  Future<void> _mutate(Future<void> Function(App app) action) async {
+    if (_fake || _disposed) {
+      return;
+    }
+    final app = _app;
+    if (app == null) {
+      _error = '曲库仍在初始化';
+      notifyListeners();
+      return;
+    }
     _loading = true;
     _error = null;
     notifyListeners();
     try {
-      await action();
-      if (!_fake) {
-        final collection = await _requireCollection();
-        _playlists = await collection.playlists();
+      await action(app);
+      if (!_disposed) {
+        _retry = null;
       }
-      _ensureSelection();
     } catch (err) {
-      _error = err.toString();
+      if (!_disposed) {
+        _error = err.toString();
+        _retry = () => unawaited(_mutate(action));
+      }
     } finally {
-      _loading = false;
-      notifyListeners();
-    }
-    if (!_fake && _error == null) {
-      unawaited(hydrateCovers());
+      if (!_disposed) {
+        _loading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -286,22 +172,24 @@ class CollectionController extends ChangeNotifier {
     if (trimmed.isEmpty) {
       return;
     }
-    await _mutate(() async {
-      if (_fake) {
-        final id = BigInt.from(_playlists.length + 1);
-        final created = Playlist(
+    if (_fake) {
+      final id = BigInt.from(_playlists.length + 1);
+      _playlists = [
+        ..._playlists,
+        Playlist(
           id: id,
           name: trimmed,
           kind: PlaylistKind.virtual,
           songs: const [],
-        );
-        _playlists = [..._playlists, created];
-        _selectedId = created.id;
-        return;
-      }
-      final collection = await _requireCollection();
-      final created = await collection.createVirtual(name: trimmed);
-      _selectedId = created.id;
+        ),
+      ];
+      _selectedId = id;
+      notifyListeners();
+      return;
+    }
+    await _mutate((app) async {
+      final id = await app.createVirtual(name: trimmed);
+      _selectedId = id;
     });
   }
 
@@ -310,44 +198,50 @@ class CollectionController extends ChangeNotifier {
     if (trimmed.isEmpty) {
       return;
     }
-    await _mutate(() async {
-      if (_fake) {
-        _playlists = [
-          for (final playlist in _playlists)
-            if (playlist.id == id)
-              Playlist(
-                id: playlist.id,
-                name: trimmed,
-                kind: playlist.kind,
-                directoryPath: playlist.directoryPath,
-                songs: playlist.songs,
-              )
-            else
-              playlist,
-        ];
-        return;
-      }
-      final collection = await _requireCollection();
-      await collection.renameVirtual(id: id, name: trimmed);
-    });
+    if (_fake) {
+      _playlists = [
+        for (final playlist in _playlists)
+          if (playlist.id == id)
+            Playlist(
+              id: playlist.id,
+              name: trimmed,
+              kind: playlist.kind,
+              directoryPath: playlist.directoryPath,
+              cover: playlist.cover,
+              songs: playlist.songs,
+            )
+          else
+            playlist,
+      ];
+      notifyListeners();
+      return;
+    }
+    await _mutate((app) => app.renameVirtual(id: id, name: trimmed));
   }
 
   Future<void> deleteVirtual(BigInt id) async {
-    await _mutate(() async {
-      if (_fake) {
-        _playlists = [
-          for (final playlist in _playlists)
-            if (playlist.id != id) playlist,
-        ];
-        if (_selectedId == id) {
-          _selectedId = null;
-        }
-        return;
-      }
-      final collection = await _requireCollection();
-      await collection.deleteVirtual(id: id);
+    if (_fake) {
+      _playlists = [
+        for (final playlist in _playlists)
+          if (playlist.id != id) playlist,
+      ];
       if (_selectedId == id) {
         _selectedId = null;
+      }
+      _ensureSelection();
+      notifyListeners();
+      return;
+    }
+    await _mutate((app) async {
+      await app.deleteVirtual(id: id);
+      if (_selectedId == id) {
+        _selectedId = null;
+        for (final playlist in _playlists) {
+          if (playlist.id != id) {
+            _selectedId = playlist.id;
+            break;
+          }
+        }
       }
     });
   }
@@ -361,49 +255,33 @@ class CollectionController extends ChangeNotifier {
   }
 
   Future<void> refresh(BigInt id) async {
-    await _mutate(() async {
-      if (_fake) {
-        return;
-      }
-      final collection = await _requireCollection();
-      await collection.refresh(id: id);
-    });
+    if (_fake) {
+      return;
+    }
+    await _mutate((app) => app.refresh(id: id));
   }
 
-  /// 打开系统目录选择器并扫描为目录列表。
   Future<void> pickAndAddDirectory() async {
     if (_fake) {
       return;
     }
-    final path = await pickMusicDirectory();
-    if (path == null || path.isEmpty) {
-      return;
-    }
-    await _mutate(() async {
-      final collection = await _requireCollection();
-      final created = await collection.addDirectory(path: path);
-      _selectedId = created.id;
+    await _mutate((app) async {
+      final id = await app.pickAndAddDirectory();
+      if (id != null) {
+        _selectedId = id;
+      }
     });
   }
 
-  /// 多选音频文件加入当前虚拟列表；若无选中虚拟列表则先创建。
   Future<void> pickAndAddFiles() async {
     if (_fake) {
       return;
     }
-    final paths = await pickMusicFiles();
-    if (paths == null || paths.isEmpty) {
-      return;
-    }
-
-    await _mutate(() async {
-      final collection = await _requireCollection();
-      var target = selectedPlaylist;
-      if (target == null || target.kind != PlaylistKind.virtual) {
-        target = await collection.createVirtual(name: '导入的歌曲');
-        _selectedId = target.id;
+    await _mutate((app) async {
+      final id = await app.pickAndAddFiles(selectedPlaylistId: _selectedId);
+      if (id != null) {
+        _selectedId = id;
       }
-      await collection.addFiles(id: target.id, paths: paths);
     });
   }
 
@@ -412,59 +290,32 @@ class CollectionController extends ChangeNotifier {
     required BigInt sourceId,
     List<String> paths = const [],
   }) async {
-    await _mutate(() async {
-      if (_fake) {
-        Playlist? source;
-        for (final playlist in _playlists) {
-          if (playlist.id == sourceId) {
-            source = playlist;
-            break;
-          }
-        }
-        if (source == null) {
-          return;
-        }
-        final imported = paths.isEmpty
-            ? source.songs
-            : source.songs.where((song) => paths.contains(song.path)).toList();
-        _playlists = [
-          for (final playlist in _playlists)
-            if (playlist.id == targetId)
-              Playlist(
-                id: playlist.id,
-                name: playlist.name,
-                kind: playlist.kind,
-                directoryPath: playlist.directoryPath,
-                songs: _mergeSongs(playlist.songs, imported),
-              )
-            else
-              playlist,
-        ];
-        return;
-      }
-      final collection = await _requireCollection();
-      await collection.importFromPlaylist(
+    if (_fake) {
+      return;
+    }
+    await _mutate(
+      (app) => app.importFromPlaylist(
         targetId: targetId,
         sourceId: sourceId,
         paths: paths,
-      );
-    });
+      ),
+    );
   }
 
-  List<Song> _mergeSongs(List<Song> existing, List<Song> incoming) {
-    final seen = existing.map((song) => song.path).toSet();
-    return [
-      ...existing,
-      for (final song in incoming)
-        if (seen.add(song.path)) song,
-    ];
+  void retryLastError() {
+    if (_disposed) {
+      return;
+    }
+    _retry?.call();
   }
 
   @override
   void dispose() {
-    if (_ownsCollection) {
-      _collection?.dispose();
-    }
+    _disposed = true;
+    _subscription?.cancel();
+    _subscription = null;
+    _app = null;
+    _retry = null;
     super.dispose();
   }
 }

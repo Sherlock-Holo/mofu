@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crossbeam_channel::Sender;
+use flume::Sender;
 
 use super::error::PlayerError;
 use super::queue::PlaybackMode;

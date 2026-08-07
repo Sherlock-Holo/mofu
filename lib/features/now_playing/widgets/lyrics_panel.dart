@@ -122,15 +122,15 @@ class _LyricsPanelState extends State<LyricsPanel> {
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 180),
               style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                    fontSize: isActive ? 20 : 16,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    color: isActive
-                        ? StrawberryCream.strawberry
-                        : StrawberryCream.wine.withValues(
-                            alpha: isPast ? 0.45 : 0.72,
-                          ),
-                    height: 1.3,
-                  ),
+                fontSize: isActive ? 20 : 16,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: isActive
+                    ? StrawberryCream.strawberry
+                    : StrawberryCream.wine.withValues(
+                        alpha: isPast ? 0.45 : 0.72,
+                      ),
+                height: 1.3,
+              ),
               child: Text(
                 line.text.isEmpty ? ' ' : line.text,
                 maxLines: 2,
@@ -152,9 +152,9 @@ class _LyricsPanelState extends State<LyricsPanel> {
       child: Text(
         text,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              height: 1.7,
-              color: StrawberryCream.wine.withValues(alpha: 0.85),
-            ),
+          height: 1.7,
+          color: StrawberryCream.wine.withValues(alpha: 0.85),
+        ),
       ),
     );
   }
@@ -177,9 +177,9 @@ class _EmptyLyrics extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             '暂无歌词',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: StrawberryCream.wineMuted,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: StrawberryCream.wineMuted),
           ),
           const SizedBox(height: 4),
           Text(

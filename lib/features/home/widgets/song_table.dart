@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mofu/app/theme.dart';
@@ -9,25 +11,8 @@ import 'package:mofu/widgets/duration_format.dart';
 import 'package:provider/provider.dart';
 
 /// 可滚动表格化歌曲列表。
-class SongTable extends StatefulWidget {
+class SongTable extends StatelessWidget {
   const SongTable({super.key});
-
-  @override
-  State<SongTable> createState() => _SongTableState();
-}
-
-class _SongTableState extends State<SongTable> {
-  List<Song>? _cachedSongs;
-  List<String> _cachedPaths = const [];
-
-  List<String> _pathsOf(List<Song> songs) {
-    if (identical(_cachedSongs, songs)) {
-      return _cachedPaths;
-    }
-    _cachedSongs = songs;
-    _cachedPaths = [for (final song in songs) song.path];
-    return _cachedPaths;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,10 +40,7 @@ class _SongTableState extends State<SongTable> {
               color: StrawberryCream.wine.withValues(alpha: 0.35),
             ),
             const SizedBox(height: 12),
-            Text(
-              '这个列表还没有歌曲',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('这个列表还没有歌曲', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               playlist.kind == PlaylistKind.directory
@@ -69,14 +51,17 @@ class _SongTableState extends State<SongTable> {
             const SizedBox(height: 16),
             if (playlist.kind == PlaylistKind.virtual)
               FilledButton.icon(
-                onPressed: collection.loading ? null : collection.pickAndAddFiles,
+                onPressed: collection.loading
+                    ? null
+                    : collection.pickAndAddFiles,
                 icon: const Icon(Icons.library_add_rounded),
                 label: const Text('添加音乐文件'),
               )
             else
               FilledButton.icon(
-                onPressed:
-                    collection.loading ? null : () => collection.refresh(playlist.id),
+                onPressed: collection.loading
+                    ? null
+                    : () => collection.refresh(playlist.id),
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('刷新目录'),
               ),
@@ -84,8 +69,6 @@ class _SongTableState extends State<SongTable> {
         ),
       );
     }
-
-    final paths = _pathsOf(songs);
 
     return Column(
       children: [
@@ -102,19 +85,18 @@ class _SongTableState extends State<SongTable> {
                 song: song,
                 playing: playing,
                 onPlay: () {
-                  player.playPaths(
-                    paths,
-                    startIndex: index,
-                    playlistId: playlist.id,
+                  unawaited(
+                    player.playIndex(playlistId: playlist.id, path: song.path),
                   );
                 },
                 onEnqueueNext: () => player.enqueueNext(song.path),
                 onOpenNowPlaying: () {
                   if (!playing) {
-                    player.playPaths(
-                      paths,
-                      startIndex: index,
-                      playlistId: playlist.id,
+                    unawaited(
+                      player.playIndex(
+                        playlistId: playlist.id,
+                        path: song.path,
+                      ),
                     );
                   }
                   context.go('/now-playing');
@@ -133,9 +115,9 @@ class _TableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: StrawberryCream.wineMuted,
-        );
+    final style = Theme.of(
+      context,
+    ).textTheme.labelLarge?.copyWith(color: StrawberryCream.wineMuted);
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 8, 28, 4),
       child: Row(
@@ -175,9 +157,7 @@ class _SongRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final meta = song.metadata;
-    final title = (meta.title?.trim().isNotEmpty == true)
-        ? meta.title!
-        : _fileName(song.path);
+    final title = song.displayTitle;
     final album = meta.album?.trim().isNotEmpty == true ? meta.album! : '—';
     final artist = meta.artist?.trim().isNotEmpty == true ? meta.artist! : '—';
 
@@ -224,10 +204,10 @@ class _SongRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: playing
-                            ? StrawberryCream.strawberry
-                            : StrawberryCream.wine,
-                      ),
+                    color: playing
+                        ? StrawberryCream.strawberry
+                        : StrawberryCream.wine,
+                  ),
                 ),
               ),
               Expanded(
@@ -275,17 +255,10 @@ class _SongRow extends StatelessWidget {
         overlay.size.width - position.dx,
         overlay.size.height - position.dy,
       ),
-      items: const [
-        PopupMenuItem(value: true, child: Text('下一首播放')),
-      ],
+      items: const [PopupMenuItem(value: true, child: Text('下一首播放'))],
     );
     if (playNext == true) {
       onEnqueueNext();
     }
-  }
-
-  String _fileName(String path) {
-    final slash = path.replaceAll('\\', '/').split('/').last;
-    return slash.isEmpty ? '未知曲目' : slash;
   }
 }

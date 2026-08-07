@@ -3,7 +3,6 @@ import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
 import 'package:mofu/src/rust/api/collection.dart';
-import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:provider/provider.dart';
 
@@ -35,7 +34,7 @@ class CurrentTrackHeader extends StatelessWidget {
       );
     }
 
-    final cover = _playlistCover(playlist);
+    final cover = playlist.cover;
     final kindLabel = switch (playlist.kind) {
       PlaylistKind.directory => '目录',
       PlaylistKind.virtual => '虚拟列表',
@@ -49,7 +48,6 @@ class CurrentTrackHeader extends StatelessWidget {
         playlist.directoryPath!,
     ];
     final subtitle = subtitleParts.join(' · ');
-    final paths = playlist.songs.map((song) => song.path).toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
@@ -60,11 +58,7 @@ class CurrentTrackHeader extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              CoverView(
-                cover: cover,
-                size: 96,
-                shadow: true,
-              ),
+              CoverView(cover: cover, size: 96, shadow: true),
               const SizedBox(width: 20),
               Expanded(
                 child: Column(
@@ -93,9 +87,9 @@ class CurrentTrackHeader extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: paths.isEmpty
+                onPressed: playlist.songs.isEmpty
                     ? null
-                    : () => player.playAll(paths, playlistId: playlist.id),
+                    : () => player.playAll(playlistId: playlist.id),
                 icon: const Icon(Icons.play_arrow_rounded),
                 label: const Text('播放全部'),
               ),
@@ -104,17 +98,6 @@ class CurrentTrackHeader extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  /// 取列表中第一张有内嵌封面的歌；都没有则交给 [CoverView] 占位。
-  CoverArt? _playlistCover(Playlist playlist) {
-    for (final song in playlist.songs) {
-      final cover = song.metadata.cover;
-      if (cover != null && cover.data.isNotEmpty) {
-        return cover;
-      }
-    }
-    return null;
   }
 }
 
