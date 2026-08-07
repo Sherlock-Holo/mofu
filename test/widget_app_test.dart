@@ -383,6 +383,66 @@ void main() {
   });
 
   group('NowPlayingPage', () {
+    testWidgets('refreshes title when metadata arrives after path change', (
+      tester,
+    ) async {
+      final player = PlayerController.fake(
+        snapshot: PlayerSnapshot(
+          kind: PlayerSnapshotKind.full,
+          positionMs: BigInt.zero,
+          durationMs: BigInt.from(180000),
+          state: PlayerState.playing,
+          volume: 0.8,
+          playbackMode: PlaybackMode.sequential,
+          currentIndex: BigInt.zero,
+          currentFromUpNext: false,
+          currentPath: '/music/dance.flac',
+          // 切歌瞬间：队列已更新，标签尚未到达 → 先显示文件名。
+          displayTitle: 'dance.flac',
+          queue: [
+            QueueItem(index: BigInt.zero, path: '/music/dance.flac'),
+          ],
+          upNext: const [],
+        ),
+      );
+      await _pumpNowPlaying(tester, player: player);
+
+      expect(find.text('dance.flac'), findsOneWidget);
+      expect(find.text('未知专辑'), findsOneWidget);
+      expect(find.text('未知歌手'), findsOneWidget);
+
+      // path / playing 不变，仅 metadata + displayTitle 到位（复现原 bug 场景）。
+      player.emitSnapshot(
+        PlayerSnapshot(
+          kind: PlayerSnapshotKind.full,
+          positionMs: BigInt.zero,
+          durationMs: BigInt.from(180000),
+          state: PlayerState.playing,
+          volume: 0.8,
+          playbackMode: PlaybackMode.sequential,
+          currentIndex: BigInt.zero,
+          currentFromUpNext: false,
+          currentPath: '/music/dance.flac',
+          displayTitle: 'dance in the forest',
+          queue: [
+            QueueItem(index: BigInt.zero, path: '/music/dance.flac'),
+          ],
+          upNext: const [],
+          metadata: _meta(
+            title: 'dance in the forest',
+            artist: 'Falcom Sound Team J.D.K.',
+            album: 'ぐるみん オリジナルサウンドトラック',
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('dance in the forest'), findsOneWidget);
+      expect(find.text('ぐるみん オリジナルサウンドトラック'), findsOneWidget);
+      expect(find.text('Falcom Sound Team J.D.K.'), findsOneWidget);
+      expect(find.text('dance.flac'), findsNothing);
+    });
+
     testWidgets('highlights active lyric line by position', (tester) async {
       final player = PlayerController.fake(snapshot: _playingSnapshot());
       await _pumpNowPlaying(tester, player: player);

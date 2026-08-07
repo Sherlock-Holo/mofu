@@ -86,39 +86,41 @@ class _TrackInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path = context.select<PlayerController, String?>(
-      (player) => player.currentPath,
-    );
-    final player = context.read<PlayerController>();
-    final meta = player.metadata;
-    final title = (player.displayTitle?.trim().isNotEmpty == true)
-        ? player.displayTitle!
-        : (meta?.title?.trim().isNotEmpty == true ? meta!.title! : '未在播放');
-    final artist = meta?.artist?.trim().isNotEmpty == true
-        ? meta!.artist!
-        : '未知歌手';
-    final canOpen = meta != null || path != null;
+    // 订阅标题/歌手/封面身份，避免切歌后 metadata 晚到时仍显示文件名。
+    final track = context.select<
+      PlayerController,
+      ({String? path, String title, String artist, int coverId, bool canOpen})
+    >((player) {
+      return (
+        path: player.currentPath,
+        title: player.uiTitle,
+        artist: player.uiArtist,
+        coverId: identityHashCode(player.metadata?.cover),
+        canOpen: player.metadata != null || player.currentPath != null,
+      );
+    });
+    final cover = context.read<PlayerController>().metadata?.cover;
 
     return InkWell(
       borderRadius: BorderRadius.circular(StrawberryCream.radiusSm),
-      onTap: canOpen ? () => context.go('/now-playing') : null,
+      onTap: track.canOpen ? () => context.go('/now-playing') : null,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CoverView(cover: meta?.cover, size: compact ? 44 : 52),
+          CoverView(cover: cover, size: compact ? 44 : 52),
           const SizedBox(width: 12),
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  track.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Text(
-                  artist,
+                  track.artist,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium,

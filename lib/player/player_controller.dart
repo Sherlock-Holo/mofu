@@ -42,6 +42,37 @@ class PlayerController extends ChangeNotifier {
   String? get displayTitle => _snapshot?.displayTitle;
   BigInt? get activeLyricsLine => _snapshot?.activeLyricsLine;
 
+  /// UI title: snapshot [displayTitle], else tag title, else idle placeholder.
+  String get uiTitle {
+    final fromSnapshot = displayTitle?.trim();
+    if (fromSnapshot != null && fromSnapshot.isNotEmpty) {
+      return fromSnapshot;
+    }
+    final fromTag = metadata?.title?.trim();
+    if (fromTag != null && fromTag.isNotEmpty) {
+      return fromTag;
+    }
+    return '未在播放';
+  }
+
+  /// UI artist with unknown fallback.
+  String get uiArtist {
+    final artist = metadata?.artist?.trim();
+    if (artist != null && artist.isNotEmpty) {
+      return artist;
+    }
+    return '未知歌手';
+  }
+
+  /// UI album with unknown fallback.
+  String get uiAlbum {
+    final album = metadata?.album?.trim();
+    if (album != null && album.isNotEmpty) {
+      return album;
+    }
+    return '未知专辑';
+  }
+
   static PlayerSnapshot idleSnapshot({
     double volume = 1,
     PlaybackMode playbackMode = PlaybackMode.sequential,

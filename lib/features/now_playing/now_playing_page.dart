@@ -68,12 +68,16 @@ class _NowPlayingBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 仅在曲目切换时重建模糊层；进度 tick 的 path 不变则跳过。
-    final path = context.select<PlayerController, String?>(
-      (player) => player.currentPath,
-    );
+    // path + cover 身份：元数据晚到时也要重建；progress tick 保留同一 cover 引用则跳过。
+    final key = context.select<PlayerController, (String?, int)>((player) {
+      return (player.currentPath, identityHashCode(player.metadata?.cover));
+    });
     final cover = context.read<PlayerController>().metadata?.cover;
-    return BlurCoverBackground(key: ValueKey(path), cover: cover, child: child);
+    return BlurCoverBackground(
+      key: ValueKey(key),
+      cover: cover,
+      child: child,
+    );
   }
 }
 
@@ -113,36 +117,42 @@ class _CoverColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path = context.select<PlayerController, String?>(
-      (player) => player.currentPath,
-    );
-    final playing = context.select<PlayerController, bool>(
-      (player) => player.isPlaying,
-    );
-    final player = context.read<PlayerController>();
-    final meta = player.metadata;
-    final title = (player.displayTitle?.trim().isNotEmpty == true)
-        ? player.displayTitle!
-        : (meta?.title?.trim().isNotEmpty == true ? meta!.title! : '未在播放');
-    final artist = meta?.artist?.trim().isNotEmpty == true
-        ? meta!.artist!
-        : '未知歌手';
-    final album = meta?.album?.trim().isNotEmpty == true
-        ? meta!.album!
-        : '未知专辑';
+    // 须订阅文案与封面身份：切歌后 path 先到、metadata 后到时仍能刷新；
+    // progress tick 下这些字段稳定，不会拖累整列重建。
+    final track = context.select<
+      PlayerController,
+      ({
+        String? path,
+        bool playing,
+        String title,
+        String artist,
+        String album,
+        int coverId,
+      })
+    >((player) {
+      return (
+        path: player.currentPath,
+        playing: player.isPlaying,
+        title: player.uiTitle,
+        artist: player.uiArtist,
+        album: player.uiAlbum,
+        coverId: identityHashCode(player.metadata?.cover),
+      );
+    });
+    final cover = context.read<PlayerController>().metadata?.cover;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         RotatingCover(
-          key: ValueKey(path),
-          cover: meta?.cover,
-          playing: playing,
+          key: ValueKey(track.path),
+          cover: cover,
+          playing: track.playing,
           size: size,
         ),
         const SizedBox(height: 28),
         Text(
-          title,
+          track.title,
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -150,7 +160,7 @@ class _CoverColumn extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          album,
+          track.album,
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -160,7 +170,7 @@ class _CoverColumn extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          artist,
+          track.artist,
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -176,19 +186,23 @@ class _LyricsHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path = context.select<PlayerController, String?>(
-      (player) => player.currentPath,
-    );
-    final activeLine = context.select<PlayerController, BigInt?>(
-      (player) => player.activeLyricsLine,
-    );
+    // 歌词列表身份随 full metadata 到达而变；activeLine 驱动高亮。
+    final cursor = context.select<PlayerController, (String?, int, BigInt?)>((
+      player,
+    ) {
+      return (
+        player.currentPath,
+        identityHashCode(player.metadata?.lyrics),
+        player.activeLyricsLine,
+      );
+    });
     final lyrics =
         context.read<PlayerController>().metadata?.lyrics ?? const <Lyrics>[];
 
     return LyricsPanel(
-      key: ValueKey(path),
+      key: ValueKey(cursor.$1),
       lyrics: lyrics,
-      activeLineHint: activeLine,
+      activeLineHint: cursor.$3,
     );
   }
 }
