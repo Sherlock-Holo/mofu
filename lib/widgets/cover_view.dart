@@ -71,6 +71,17 @@ class CoverView extends StatelessWidget {
   }
 
   Widget _placeholder(double size) {
+    return _CoverPlaceholder(size: size);
+  }
+}
+
+class _CoverPlaceholder extends StatelessWidget {
+  const _CoverPlaceholder({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: StrawberryCream.coverPlaceholder,

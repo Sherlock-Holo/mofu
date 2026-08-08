@@ -70,43 +70,94 @@ class SongTable extends StatelessWidget {
       );
     }
 
+    final selectedPlaylist = playlist;
+
+    _SongRow buildRow(int index) {
+      final song = songs[index];
+      final playing = playingPath == song.path;
+      return _SongRow(
+        index: index,
+        song: song,
+        playing: playing,
+        onPlay: () {
+          unawaited(
+            player.playIndex(playlistId: selectedPlaylist.id, path: song.path),
+          );
+        },
+        onEnqueueNext: () => player.enqueueNext(song.path),
+        onOpenNowPlaying: () {
+          if (!playing) {
+            unawaited(
+              player.playIndex(
+                playlistId: selectedPlaylist.id,
+                path: song.path,
+              ),
+            );
+          }
+          context.go('/now-playing');
+        },
+      );
+    }
+
     return Column(
       children: [
         const _TableHeader(),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: _FastScrollSongList(
             itemCount: songs.length,
-            itemBuilder: (context, index) {
-              final song = songs[index];
-              final playing = playingPath == song.path;
-              return _SongRow(
-                index: index,
-                song: song,
-                playing: playing,
-                onPlay: () {
-                  unawaited(
-                    player.playIndex(playlistId: playlist.id, path: song.path),
-                  );
-                },
-                onEnqueueNext: () => player.enqueueNext(song.path),
-                onOpenNowPlaying: () {
-                  if (!playing) {
-                    unawaited(
-                      player.playIndex(
-                        playlistId: playlist.id,
-                        path: song.path,
-                      ),
-                    );
-                  }
-                  context.go('/now-playing');
-                },
-              );
-            },
+            itemBuilder: (_, index) => buildRow(index),
           ),
         ),
       ],
     );
+  }
+}
+
+class _FastScrollSongList extends StatefulWidget {
+  const _FastScrollSongList({
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+
+  @override
+  State<_FastScrollSongList> createState() => _FastScrollSongListState();
+}
+
+class _FastScrollSongListState extends State<_FastScrollSongList> {
+  bool _isDragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: _handleScrollNotification,
+      child: ExcludeSemantics(
+        excluding: _isDragging,
+        child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          // 每行高度为上下 padding 16 加封面高度 40。
+          itemExtent: 56,
+          itemCount: widget.itemCount,
+          itemBuilder: widget.itemBuilder,
+        ),
+      ),
+    );
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    final isDragging = switch (notification) {
+      ScrollStartNotification(:final dragDetails) => dragDetails != null,
+      ScrollUpdateNotification(:final dragDetails) =>
+        dragDetails != null ? true : _isDragging,
+      ScrollEndNotification() => false,
+      _ => _isDragging,
+    };
+    if (isDragging != _isDragging) {
+      setState(() => _isDragging = isDragging);
+    }
+    return false;
   }
 }
 
