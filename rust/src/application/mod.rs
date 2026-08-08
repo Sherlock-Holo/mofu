@@ -18,7 +18,8 @@ use ports::{CollectionAdapter, CollectionPort, PlayerAdapter, PlayerPort};
 use tracing::{debug, warn};
 
 use crate::collection::{
-    CollectionError, PlaybackSession, PlaylistId, SessionRestorePlan, StoredPlaybackMode,
+    CollectionError, CoverAnimationInBackground, PlaybackSession, PlaylistId, SessionRestorePlan,
+    StoredPlaybackMode,
 };
 use crate::file_dialog::{
     DialogSelection, DirectoryDialogRequest, FileDialog, MusicFilesDialogRequest, RfdFileDialog,
@@ -52,6 +53,7 @@ where
     dialog: D,
     source_playlist_id: Mutex<Option<PlaylistId>>,
     volume_state: Mutex<VolumePersistState>,
+    cover_animation_in_background: Mutex<CoverAnimationInBackground>,
     player_events: Mutex<SnapshotBus<PlayerView>>,
     library_events: Mutex<SnapshotBus<LibrarySnapshot>>,
     persist_tx: Sender<PersistCommand>,
@@ -72,10 +74,12 @@ struct VolumePersistState {
 enum PersistCommand {
     Session(Option<PlaybackSession>),
     Mode(PlaybackMode),
+    CoverAnimation(CoverAnimationInBackground),
     Volume(f64),
     Flush {
         volume: f64,
         mode: PlaybackMode,
+        cover_animation_in_background: CoverAnimationInBackground,
         session: Option<PlaybackSession>,
         reply: Sender<()>,
     },
@@ -183,12 +187,16 @@ impl Application<CollectionAdapter, PlayerAdapter, RfdFileDialog> {
         let (persist_tx, persist_rx) = flume::unbounded();
         let shutdown = Arc::new(AtomicBool::new(false));
 
+        let cover_animation_in_background =
+            CollectionPort::cover_animation_in_background(&collection).await?;
+
         let app = Arc::new(Self {
             player,
             collection,
             dialog: RfdFileDialog::default(),
             source_playlist_id: Mutex::new(None),
             volume_state: Mutex::new(VolumePersistState::default()),
+            cover_animation_in_background: Mutex::new(cover_animation_in_background),
             player_events: Mutex::new(SnapshotBus::default()),
             library_events: Mutex::new(SnapshotBus::default()),
             persist_tx,
@@ -238,6 +246,7 @@ impl Application<CollectionAdapter, PlayerAdapter, RfdFileDialog> {
             library: library.clone(),
             player: player_view,
             selected_playlist_id,
+            cover_animation_in_background,
         };
 
         app.spawn_persist_worker(persist_rx);
@@ -310,6 +319,15 @@ where
                         warn!(%err, "persist playback mode failed");
                     }
                 }
+                PersistCommand::CoverAnimation(value) => {
+                    if let Err(err) = self
+                        .collection
+                        .set_cover_animation_in_background(value)
+                        .await
+                    {
+                        warn!(%err, "persist cover animation preference failed");
+                    }
+                }
                 PersistCommand::Volume(volume) => {
                     if let Err(err) = self.collection.set_volume(volume).await {
                         warn!(%err, "persist volume failed");
@@ -318,6 +336,7 @@ where
                 PersistCommand::Flush {
                     volume,
                     mode,
+                    cover_animation_in_background,
                     session,
                     reply,
                 } => {
@@ -330,6 +349,13 @@ where
                         .await
                     {
                         warn!(%err, "flush playback mode failed");
+                    }
+                    if let Err(err) = self
+                        .collection
+                        .set_cover_animation_in_background(cover_animation_in_background)
+                        .await
+                    {
+                        warn!(%err, "flush cover animation preference failed");
                     }
                     self.persist_session(session).await;
                     let _ = reply.send(());
@@ -559,6 +585,31 @@ where
         Ok(())
     }
 
+    pub(crate) fn cover_animation_in_background(&self) -> CoverAnimationInBackground {
+        *self
+            .cover_animation_in_background
+            .lock()
+            .expect("cover animation mutex")
+    }
+
+    pub(crate) fn set_cover_animation_in_background(
+        &self,
+        value: CoverAnimationInBackground,
+    ) -> Result<(), ApplicationError> {
+        *self
+            .cover_animation_in_background
+            .lock()
+            .expect("cover animation mutex") = value;
+        if self
+            .persist_tx
+            .send(PersistCommand::CoverAnimation(value))
+            .is_err()
+        {
+            warn!("persist cover animation channel closed");
+        }
+        Ok(())
+    }
+
     pub(crate) fn enqueue_next(&self, path: String) -> Result<(), ApplicationError> {
         Ok(self.player.enqueue_next(PathBuf::from(path))?)
     }
@@ -692,6 +743,7 @@ where
         let view = self.player_view();
         let volume = view.volume;
         let mode = view.playback_mode;
+        let cover_animation_in_background = self.cover_animation_in_background();
         let session = match (view.state, view.source_playlist_id, view.session_path) {
             (PlaybackState::Idle, _, _) => None,
             (_, Some(playlist_id), Some(path)) if !view.queue.is_empty() => Some(PlaybackSession {
@@ -707,6 +759,7 @@ where
             .send(PersistCommand::Flush {
                 volume,
                 mode,
+                cover_animation_in_background,
                 session,
                 reply: reply_tx,
             })
@@ -747,28 +800,6 @@ where
             let _ = async_global_executor::block_on(task.cancel());
         }
         self.player.shutdown();
-    }
-}
-
-impl From<StoredPlaybackMode> for PlaybackMode {
-    fn from(mode: StoredPlaybackMode) -> Self {
-        match mode {
-            StoredPlaybackMode::Sequential => Self::Sequential,
-            StoredPlaybackMode::Shuffle => Self::Shuffle,
-            StoredPlaybackMode::RepeatOne => Self::RepeatOne,
-            StoredPlaybackMode::RepeatAll => Self::RepeatAll,
-        }
-    }
-}
-
-impl From<PlaybackMode> for StoredPlaybackMode {
-    fn from(mode: PlaybackMode) -> Self {
-        match mode {
-            PlaybackMode::Sequential => Self::Sequential,
-            PlaybackMode::Shuffle => Self::Shuffle,
-            PlaybackMode::RepeatOne => Self::RepeatOne,
-            PlaybackMode::RepeatAll => Self::RepeatAll,
-        }
     }
 }
 

@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::collection::{
-    Collection, CollectionError, PlaybackSession, Playlist, PlaylistId, SessionRestorePlan,
-    StoredPlaybackMode,
+    Collection, CollectionError, CoverAnimationInBackground, PlaybackSession, Playlist, PlaylistId,
+    SessionRestorePlan, StoredPlaybackMode,
 };
 use crate::player::{PlaybackMode, Player, PlayerError, PlayerSnapshot};
 
@@ -32,6 +32,13 @@ pub(crate) trait CollectionPort: Send + Sync + 'static {
     fn set_playback_mode(
         &self,
         mode: StoredPlaybackMode,
+    ) -> impl Future<Output = Result<(), CollectionError>> + Send;
+    fn cover_animation_in_background(
+        &self,
+    ) -> impl Future<Output = Result<CoverAnimationInBackground, CollectionError>> + Send;
+    fn set_cover_animation_in_background(
+        &self,
+        value: CoverAnimationInBackground,
     ) -> impl Future<Output = Result<(), CollectionError>> + Send;
     fn playback_session(
         &self,
@@ -105,6 +112,19 @@ impl CollectionPort for CollectionAdapter {
 
     async fn set_playback_mode(&self, mode: StoredPlaybackMode) -> Result<(), CollectionError> {
         self.inner.set_playback_mode(mode).await
+    }
+
+    async fn cover_animation_in_background(
+        &self,
+    ) -> Result<CoverAnimationInBackground, CollectionError> {
+        self.inner.cover_animation_in_background().await
+    }
+
+    async fn set_cover_animation_in_background(
+        &self,
+        value: CoverAnimationInBackground,
+    ) -> Result<(), CollectionError> {
+        self.inner.set_cover_animation_in_background(value).await
     }
 
     async fn playback_session(&self) -> Result<Option<PlaybackSession>, CollectionError> {

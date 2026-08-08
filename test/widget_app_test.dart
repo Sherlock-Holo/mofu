@@ -7,9 +7,13 @@ import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/features/now_playing/now_playing_page.dart';
 import 'package:mofu/features/now_playing/widgets/lyrics_panel.dart';
 import 'package:mofu/features/now_playing/widgets/rotating_cover.dart';
+import 'package:mofu/features/settings/settings_page.dart';
 import 'package:mofu/player/player_controller.dart';
+import 'package:mofu/settings/settings_controller.dart';
+import 'package:mofu/src/rust/api/app.dart';
 import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/src/rust/api/player.dart';
+import 'package:mofu/widgets/playback_bar.dart';
 import 'package:mofu/widgets/playback_mode_button.dart';
 import 'package:provider/provider.dart';
 
@@ -128,6 +132,7 @@ Future<void> _pumpApp(
   WidgetTester tester, {
   required CollectionController collection,
   required PlayerController player,
+  SettingsController? settings,
   Size size = const Size(1200, 800),
 }) async {
   tester.view.physicalSize = size;
@@ -138,7 +143,11 @@ Future<void> _pumpApp(
   });
 
   await tester.pumpWidget(
-    MofuApp(collectionController: collection, playerController: player),
+    MofuApp(
+      collectionController: collection,
+      playerController: player,
+      settingsController: settings ?? SettingsController.fake(),
+    ),
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
@@ -147,6 +156,7 @@ Future<void> _pumpApp(
 Future<void> _pumpNowPlaying(
   WidgetTester tester, {
   required PlayerController player,
+  SettingsController? settings,
 }) async {
   tester.view.physicalSize = const Size(1200, 800);
   tester.view.devicePixelRatio = 1;
@@ -156,8 +166,13 @@ Future<void> _pumpNowPlaying(
   });
 
   await tester.pumpWidget(
-    ChangeNotifierProvider<PlayerController>.value(
-      value: player,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<PlayerController>.value(value: player),
+        ChangeNotifierProvider<SettingsController>.value(
+          value: settings ?? SettingsController.fake(),
+        ),
+      ],
       child: MaterialApp(
         theme: StrawberryCream.theme(),
         home: const NowPlayingPage(),
@@ -399,9 +414,7 @@ void main() {
           currentPath: '/music/dance.flac',
           // 切歌瞬间：队列已更新，标签尚未到达 → 先显示文件名。
           displayTitle: 'dance.flac',
-          queue: [
-            QueueItem(index: BigInt.zero, path: '/music/dance.flac'),
-          ],
+          queue: [QueueItem(index: BigInt.zero, path: '/music/dance.flac')],
           upNext: const [],
         ),
       );
@@ -424,9 +437,7 @@ void main() {
           currentFromUpNext: false,
           currentPath: '/music/dance.flac',
           displayTitle: 'dance in the forest',
-          queue: [
-            QueueItem(index: BigInt.zero, path: '/music/dance.flac'),
-          ],
+          queue: [QueueItem(index: BigInt.zero, path: '/music/dance.flac')],
           upNext: const [],
           metadata: _meta(
             title: 'dance in the forest',
@@ -533,6 +544,250 @@ void main() {
       await _waitForRotatingCover(tester);
       final paused = _coverMatrix(tester);
       await tester.pump(const Duration(seconds: 3));
+      expect(_coverMatrix(tester).storage, paused.storage);
+    });
+
+    testWidgets('does not spin after track change while app is inactive', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: RotatingCover(
+                key: ValueKey('track-1'),
+                cover: null,
+                playing: true,
+                size: 120,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _waitForRotatingCover(tester);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: RotatingCover(
+                key: ValueKey('track-2'),
+                cover: null,
+                playing: true,
+                size: 120,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _waitForRotatingCover(tester);
+
+      final afterTrackChange = _coverMatrix(tester);
+      await tester.pump(const Duration(seconds: 3));
+      expect(_coverMatrix(tester).storage, afterTrackChange.storage);
+    });
+
+    testWidgets('keeps spinning in background when pauseWhenInactive is false', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: RotatingCover(
+                cover: null,
+                playing: true,
+                pauseWhenInactive: false,
+                size: 120,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _waitForRotatingCover(tester);
+
+      final before = _coverMatrix(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      // Frames are disabled while paused; advance wall time then resume to paint.
+      await tester.pump(const Duration(seconds: 3));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(_coverMatrix(tester).storage, isNot(before.storage));
+    });
+
+    testWidgets('stops in background when pauseWhenInactive is true', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: RotatingCover(
+                cover: null,
+                playing: true,
+                pauseWhenInactive: true,
+                size: 120,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _waitForRotatingCover(tester);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      final paused = _coverMatrix(tester);
+      await tester.pump(const Duration(seconds: 3));
+      // Still paused: timer is cancelled so the angle stays frozen.
+      expect(_coverMatrix(tester).storage, paused.storage);
+    });
+  });
+
+  group('Settings', () {
+    testWidgets('sidebar opens settings without playback bar or pause', (
+      tester,
+    ) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+      final settings = SettingsController.fake();
+
+      await _pumpApp(
+        tester,
+        collection: collection,
+        player: player,
+        settings: settings,
+      );
+
+      expect(find.byTooltip('设置'), findsOneWidget);
+      await tester.tap(find.byTooltip('设置'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SettingsPage), findsOneWidget);
+      expect(find.text('后台播放时停止唱片动画'), findsOneWidget);
+      expect(find.byType(PlaybackBar), findsNothing);
+      expect(player.isPlaying, isTrue);
+      expect(player.recordedCommands, isNot(contains('pause')));
+    });
+
+    testWidgets('toggle updates controller and records command', (
+      tester,
+    ) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+      final settings = SettingsController.fake();
+
+      await _pumpApp(
+        tester,
+        collection: collection,
+        player: player,
+        settings: settings,
+      );
+      await tester.tap(find.byTooltip('设置'));
+      await tester.pumpAndSettle();
+
+      expect(settings.pauseCoverAnimationInBackground, isTrue);
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      expect(settings.pauseCoverAnimationInBackground, isFalse);
+      expect(
+        settings.coverAnimationInBackground,
+        CoverAnimationInBackground.continue_,
+      );
+      expect(
+        settings.recordedCommands,
+        contains(
+          'setCoverAnimationInBackground:${CoverAnimationInBackground.continue_}',
+        ),
+      );
+    });
+
+    testWidgets('narrow drawer exposes settings entry', (tester) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake();
+
+      await _pumpApp(
+        tester,
+        collection: collection,
+        player: player,
+        size: const Size(700, 900),
+      );
+
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('设置'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('设置'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsOneWidget);
+    });
+
+    testWidgets('rolls back switch when persistence throws', (tester) async {
+      final settings = SettingsController()
+        ..testSetCoverAnimation = (_) => throw StateError('persist failed');
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<SettingsController>.value(
+          value: settings,
+          child: MaterialApp(
+            theme: StrawberryCream.theme(),
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+
+      expect(settings.pauseCoverAnimationInBackground, isTrue);
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+
+      expect(settings.pauseCoverAnimationInBackground, isTrue);
+      expect(find.textContaining('persist failed'), findsOneWidget);
+    });
+
+    testWidgets('now playing respects settings continue in background', (
+      tester,
+    ) async {
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+      final settings = SettingsController.fake(
+        coverAnimationInBackground: CoverAnimationInBackground.continue_,
+      );
+      await _pumpNowPlaying(tester, player: player, settings: settings);
+      await _waitForRotatingCover(tester);
+
+      final before = _coverMatrix(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(_coverMatrix(tester).storage, isNot(before.storage));
+    });
+
+    testWidgets('now playing stops in background with default pause setting', (
+      tester,
+    ) async {
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+      final settings = SettingsController.fake();
+      await _pumpNowPlaying(tester, player: player, settings: settings);
+      await _waitForRotatingCover(tester);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      final paused = _coverMatrix(tester);
+      await tester.pump(const Duration(seconds: 2));
       expect(_coverMatrix(tester).storage, paused.storage);
     });
   });

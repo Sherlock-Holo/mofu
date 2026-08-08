@@ -127,6 +127,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
+  CoverAnimationInBackground dco_decode_cover_animation_in_background(
+    dynamic raw,
+  );
+
+  @protected
   CoverArt dco_decode_cover_art(dynamic raw);
 
   @protected
@@ -352,6 +357,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  CoverAnimationInBackground sse_decode_cover_animation_in_background(
+    SseDeserializer deserializer,
+  );
 
   @protected
   CoverArt sse_decode_cover_art(SseDeserializer deserializer);
@@ -611,6 +621,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cover_animation_in_background(
+    CoverAnimationInBackground self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_cover_art(CoverArt self, SseSerializer serializer);

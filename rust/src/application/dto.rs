@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::collection::{Playlist, PlaylistId, PlaylistKind, Song};
+use crate::collection::{CoverAnimationInBackground, Playlist, PlaylistId, PlaylistKind, Song};
 use crate::player::metadata::{CoverArt, TrackMetadata};
 use crate::player::{
     PlaybackMode, PlaybackState, PlayerSnapshot as DomainPlayerSnapshot, QueuePosition,
@@ -216,6 +216,7 @@ pub(crate) struct BootstrapSnapshot {
     pub library: LibrarySnapshot,
     pub player: PlayerView,
     pub selected_playlist_id: Option<PlaylistId>,
+    pub cover_animation_in_background: CoverAnimationInBackground,
 }
 
 impl LibrarySnapshot {

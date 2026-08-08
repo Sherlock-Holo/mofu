@@ -8,13 +8,15 @@ import 'collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'player.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `drop`, `eq`, `eq`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<App>>
 abstract class App implements RustOpaqueInterface {
   /// Open catalog + player, restore session, and start background watchers.
   static Future<(App, BootstrapSnapshot)> bootstrap() =>
       RustLib.instance.api.crateApiAppAppBootstrap();
+
+  CoverAnimationInBackground coverAnimationInBackground();
 
   Future<BigInt> createVirtual({required String name});
 
@@ -60,6 +62,10 @@ abstract class App implements RustOpaqueInterface {
 
   void seekRelative({required PlatformInt64 deltaMs});
 
+  void setCoverAnimationInBackground({
+    required CoverAnimationInBackground value,
+  });
+
   void setPlaybackMode({required PlaybackMode mode});
 
   void setVolume({required double volume});
@@ -81,16 +87,21 @@ class BootstrapSnapshot {
   final LibrarySnapshot library_;
   final PlayerSnapshot player;
   final BigInt? selectedPlaylistId;
+  final CoverAnimationInBackground coverAnimationInBackground;
 
   const BootstrapSnapshot({
     required this.library_,
     required this.player,
     this.selectedPlaylistId,
+    required this.coverAnimationInBackground,
   });
 
   @override
   int get hashCode =>
-      library_.hashCode ^ player.hashCode ^ selectedPlaylistId.hashCode;
+      library_.hashCode ^
+      player.hashCode ^
+      selectedPlaylistId.hashCode ^
+      coverAnimationInBackground.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -99,8 +110,12 @@ class BootstrapSnapshot {
           runtimeType == other.runtimeType &&
           library_ == other.library_ &&
           player == other.player &&
-          selectedPlaylistId == other.selectedPlaylistId;
+          selectedPlaylistId == other.selectedPlaylistId &&
+          coverAnimationInBackground == other.coverAnimationInBackground;
 }
+
+/// Whether the now-playing cover keeps spinning while the app is backgrounded.
+enum CoverAnimationInBackground { pause, continue_ }
 
 /// Library state pushed to Flutter.
 class LibrarySnapshot {

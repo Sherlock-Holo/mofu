@@ -5,6 +5,7 @@ import 'package:mofu/app/router.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/player/player_controller.dart';
+import 'package:mofu/settings/settings_controller.dart';
 import 'package:mofu/src/rust/api/app.dart';
 import 'package:mofu/src/rust/api/setup.dart';
 import 'package:mofu/src/rust/frb_generated.dart';
@@ -12,14 +13,20 @@ import 'package:provider/provider.dart';
 
 /// Mofu播放器根应用：注入控制器、主题与路由。
 class MofuApp extends StatefulWidget {
-  const MofuApp({super.key, this.collectionController, this.playerController})
-    : assert(
-        (collectionController == null) == (playerController == null),
-        'Inject both controllers together, or neither.',
-      );
+  const MofuApp({
+    super.key,
+    this.collectionController,
+    this.playerController,
+    this.settingsController,
+  }) : assert(
+         (collectionController == null) == (playerController == null) &&
+             (collectionController == null) == (settingsController == null),
+         'Inject all controllers together, or neither.',
+       );
 
   final CollectionController? collectionController;
   final PlayerController? playerController;
+  final SettingsController? settingsController;
 
   @override
   State<MofuApp> createState() => _MofuAppState();
@@ -30,9 +37,12 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
       widget.collectionController ?? CollectionController();
   late final PlayerController _player =
       widget.playerController ?? PlayerController();
+  late final SettingsController _settings =
+      widget.settingsController ?? SettingsController();
   late final _router = createRouter();
   var _ownsCollection = false;
   var _ownsPlayer = false;
+  var _ownsSettings = false;
   var _bootstrapping = false;
   Object? _bootstrapError;
   App? _app;
@@ -43,13 +53,14 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _ownsCollection = widget.collectionController == null;
     _ownsPlayer = widget.playerController == null;
-    _bootstrapping = _ownsCollection || _ownsPlayer;
+    _ownsSettings = widget.settingsController == null;
+    _bootstrapping = _ownsCollection || _ownsPlayer || _ownsSettings;
     unawaited(_bootstrap());
   }
 
   Future<void> _bootstrap() async {
     // 测试注入 fake 时跳过 Rust 初始化。
-    if (!_ownsCollection && !_ownsPlayer) {
+    if (!_ownsCollection && !_ownsPlayer && !_ownsSettings) {
       return;
     }
 
@@ -75,6 +86,7 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
         selectedPlaylistId: snapshot.selectedPlaylistId,
       );
       _player.attach(app, initial: snapshot.player);
+      _settings.attach(app, initial: snapshot.coverAnimationInBackground);
       if (mounted) {
         setState(() {
           _bootstrapping = false;
@@ -120,6 +132,9 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
     if (_ownsCollection) {
       _collection.dispose();
     }
+    if (_ownsSettings) {
+      _settings.dispose();
+    }
     final app = _app;
     _app = null;
     if (app != null) {
@@ -135,6 +150,7 @@ class _MofuAppState extends State<MofuApp> with WidgetsBindingObserver {
       providers: [
         ChangeNotifierProvider<CollectionController>.value(value: _collection),
         ChangeNotifierProvider<PlayerController>.value(value: _player),
+        ChangeNotifierProvider<SettingsController>.value(value: _settings),
       ],
       child: MaterialApp.router(
         title: 'Mofu',

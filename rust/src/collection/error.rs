@@ -20,6 +20,36 @@ pub(crate) enum CatalogNumericField {
     DiscTotal,
 }
 
+impl CatalogNumericField {
+    pub(crate) fn u64_from_i64(self, value: i64) -> Result<u64, CollectionError> {
+        u64::try_from(value).map_err(|_| CatalogDataError::InvalidNumericField(self).into())
+    }
+
+    pub(crate) fn opt_u16_from_i64(
+        self,
+        value: Option<i64>,
+    ) -> Result<Option<u16>, CollectionError> {
+        match value {
+            None => Ok(None),
+            Some(raw) => u16::try_from(raw)
+                .map(Some)
+                .map_err(|_| CatalogDataError::InvalidNumericField(self).into()),
+        }
+    }
+
+    pub(crate) fn opt_u64_from_i64(
+        self,
+        value: Option<i64>,
+    ) -> Result<Option<u64>, CollectionError> {
+        match value {
+            None => Ok(None),
+            Some(raw) => u64::try_from(raw)
+                .map(Some)
+                .map_err(|_| CatalogDataError::InvalidNumericField(self).into()),
+        }
+    }
+}
+
 /// Corrupt or unexpected values read from `catalog.db`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub(crate) enum CatalogDataError {

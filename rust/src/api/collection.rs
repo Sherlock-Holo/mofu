@@ -8,6 +8,7 @@ use crate::collection::{
     Playlist as DomainPlaylist, PlaylistKind as DomainPlaylistKind, Song as DomainSong,
     StoredPlaybackMode,
 };
+use crate::player::PlaybackMode as DomainPlaybackMode;
 
 /// FFI handle for the persistent local music collection.
 #[flutter_rust_bridge::frb(opaque)]
@@ -200,23 +201,13 @@ pub enum PlaylistKind {
 
 impl From<PlaybackMode> for StoredPlaybackMode {
     fn from(mode: PlaybackMode) -> Self {
-        match mode {
-            PlaybackMode::Sequential => Self::Sequential,
-            PlaybackMode::Shuffle => Self::Shuffle,
-            PlaybackMode::RepeatOne => Self::RepeatOne,
-            PlaybackMode::RepeatAll => Self::RepeatAll,
-        }
+        StoredPlaybackMode::from(DomainPlaybackMode::from(mode))
     }
 }
 
 impl From<StoredPlaybackMode> for PlaybackMode {
     fn from(mode: StoredPlaybackMode) -> Self {
-        match mode {
-            StoredPlaybackMode::Sequential => Self::Sequential,
-            StoredPlaybackMode::Shuffle => Self::Shuffle,
-            StoredPlaybackMode::RepeatOne => Self::RepeatOne,
-            StoredPlaybackMode::RepeatAll => Self::RepeatAll,
-        }
+        PlaybackMode::from(DomainPlaybackMode::from(mode))
     }
 }
 

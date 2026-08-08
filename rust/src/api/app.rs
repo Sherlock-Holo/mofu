@@ -12,6 +12,7 @@ use crate::application::{
     Application, BootstrapSnapshot as DomainBootstrap, LibrarySnapshot as DomainLibrary,
     PlayerView, PlayerViewKind, PlaylistView, SongView,
 };
+use crate::collection::CoverAnimationInBackground as DomainCoverAnimation;
 use crate::collection::PlaylistKind as DomainPlaylistKind;
 use crate::frb_generated::StreamSink;
 
@@ -116,6 +117,21 @@ impl App {
     }
 
     #[flutter_rust_bridge::frb(sync)]
+    pub fn cover_animation_in_background(&self) -> CoverAnimationInBackground {
+        self.inner.cover_animation_in_background().into()
+    }
+
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn set_cover_animation_in_background(
+        &self,
+        value: CoverAnimationInBackground,
+    ) -> Result<(), String> {
+        self.inner
+            .set_cover_animation_in_background(value.into())
+            .map_err(|err| err.to_string())
+    }
+
+    #[flutter_rust_bridge::frb(sync)]
     pub fn enqueue_next(&self, path: String) -> Result<(), String> {
         self.inner.enqueue_next(path).map_err(|err| err.to_string())
     }
@@ -211,6 +227,14 @@ pub struct BootstrapSnapshot {
     pub library: LibrarySnapshot,
     pub player: PlayerSnapshot,
     pub selected_playlist_id: Option<u64>,
+    pub cover_animation_in_background: CoverAnimationInBackground,
+}
+
+/// Whether the now-playing cover keeps spinning while the app is backgrounded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoverAnimationInBackground {
+    Pause,
+    Continue,
 }
 
 /// Library state pushed to Flutter.
@@ -226,6 +250,25 @@ impl From<DomainBootstrap> for BootstrapSnapshot {
             library: value.library.into(),
             player: value.player.into(),
             selected_playlist_id: value.selected_playlist_id,
+            cover_animation_in_background: value.cover_animation_in_background.into(),
+        }
+    }
+}
+
+impl From<DomainCoverAnimation> for CoverAnimationInBackground {
+    fn from(value: DomainCoverAnimation) -> Self {
+        match value {
+            DomainCoverAnimation::Pause => Self::Pause,
+            DomainCoverAnimation::Continue => Self::Continue,
+        }
+    }
+}
+
+impl From<CoverAnimationInBackground> for DomainCoverAnimation {
+    fn from(value: CoverAnimationInBackground) -> Self {
+        match value {
+            CoverAnimationInBackground::Pause => Self::Pause,
+            CoverAnimationInBackground::Continue => Self::Continue,
         }
     }
 }

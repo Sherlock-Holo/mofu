@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use cover_store::CoverStore;
 use directories::ProjectDirs;
 pub use error::CollectionError;
-pub(crate) use model::StoredPlaybackMode;
+pub(crate) use model::{CoverAnimationInBackground, StoredPlaybackMode};
 pub use model::{PlaybackSession, Playlist, PlaylistId, PlaylistKind, Song};
-use model::{SongId, SongRow, SongTags};
+use model::{SongId, SongTags};
 use scan::CollectionScanner;
 use store::{Catalog, CatalogStore};
 
@@ -303,35 +303,9 @@ impl<C: Catalog> Collection<C> {
         let mut songs = Vec::with_capacity(rows.len());
         for row in rows {
             // 首包只带文字标签；封面经 covers_for_paths 异步补全，歌词由播放路径提供。
-            songs.push(Self::assemble_song_lite(row));
+            songs.push(Song::from(row));
         }
         Ok(songs)
-    }
-
-    fn assemble_song_lite(row: SongRow) -> Song {
-        Song {
-            path: row.path,
-            duration_ms: row.duration_ms,
-            metadata: TrackMetadata {
-                title: row.tags.title,
-                artist: row.tags.artist,
-                album: row.tags.album,
-                album_artist: row.tags.album_artist,
-                composer: row.tags.composer,
-                lyricist: row.tags.lyricist,
-                performer: row.tags.performer,
-                genre: row.tags.genre,
-                comment: row.tags.comment,
-                date: row.tags.date,
-                year: row.tags.year,
-                track_number: row.tags.track_number,
-                track_total: row.tags.track_total,
-                disc_number: row.tags.disc_number,
-                disc_total: row.tags.disc_total,
-                cover: None,
-                lyrics: Vec::new(),
-            },
-        }
     }
 
     async fn persist_songs(&self, songs: &[Song]) -> Result<Vec<SongId>, CollectionError> {
@@ -381,6 +355,19 @@ impl<C: Catalog> Collection<C> {
         mode: StoredPlaybackMode,
     ) -> Result<(), CollectionError> {
         self.catalog.set_playback_mode(mode).await
+    }
+
+    pub(crate) async fn cover_animation_in_background(
+        &self,
+    ) -> Result<CoverAnimationInBackground, CollectionError> {
+        self.catalog.cover_animation_in_background().await
+    }
+
+    pub(crate) async fn set_cover_animation_in_background(
+        &self,
+        value: CoverAnimationInBackground,
+    ) -> Result<(), CollectionError> {
+        self.catalog.set_cover_animation_in_background(value).await
     }
 
     pub(crate) async fn volume(&self) -> Result<f64, CollectionError> {
@@ -721,6 +708,84 @@ mod tests {
             assert_eq!(
                 reopened.playback_mode().await.expect("repeat one"),
                 StoredPlaybackMode::RepeatOne
+            );
+        });
+    }
+
+    #[test]
+    fn cover_animation_defaults_and_persists_across_reopen() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            {
+                let collection = open_test_collection(&dirs).await;
+                assert_eq!(
+                    collection
+                        .cover_animation_in_background()
+                        .await
+                        .expect("default"),
+                    CoverAnimationInBackground::Pause
+                );
+                collection
+                    .set_cover_animation_in_background(CoverAnimationInBackground::Continue)
+                    .await
+                    .expect("set");
+                assert_eq!(
+                    collection
+                        .cover_animation_in_background()
+                        .await
+                        .expect("read"),
+                    CoverAnimationInBackground::Continue
+                );
+            }
+            let reopened = open_test_collection(&dirs).await;
+            assert_eq!(
+                reopened
+                    .cover_animation_in_background()
+                    .await
+                    .expect("reopen"),
+                CoverAnimationInBackground::Continue
+            );
+            reopened
+                .set_cover_animation_in_background(CoverAnimationInBackground::Pause)
+                .await
+                .expect("set pause");
+            assert_eq!(
+                reopened
+                    .cover_animation_in_background()
+                    .await
+                    .expect("pause"),
+                CoverAnimationInBackground::Pause
+            );
+        });
+    }
+
+    #[test]
+    fn corrupt_cover_animation_falls_back_to_pause() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            {
+                let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
+                    .await
+                    .expect("open catalog");
+                catalog
+                    .upsert_meta_raw("cover_animation_in_background", "spin-forever")
+                    .await
+                    .expect("plant corrupt value");
+            }
+            let collection = open_test_collection(&dirs).await;
+            assert_eq!(
+                collection
+                    .cover_animation_in_background()
+                    .await
+                    .expect("corrupt cleared"),
+                CoverAnimationInBackground::Pause
+            );
+            assert_eq!(
+                collection
+                    .cover_animation_in_background()
+                    .await
+                    .expect("stays default"),
+                CoverAnimationInBackground::Pause
             );
         });
     }

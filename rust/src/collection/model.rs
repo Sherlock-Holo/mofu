@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::player::PlaybackMode;
 use crate::player::metadata::TrackMetadata;
 
 /// Stable playlist identifier persisted in the collection catalog.
@@ -97,6 +98,55 @@ impl StoredPlaybackMode {
     }
 }
 
+impl From<StoredPlaybackMode> for PlaybackMode {
+    fn from(mode: StoredPlaybackMode) -> Self {
+        match mode {
+            StoredPlaybackMode::Sequential => Self::Sequential,
+            StoredPlaybackMode::Shuffle => Self::Shuffle,
+            StoredPlaybackMode::RepeatOne => Self::RepeatOne,
+            StoredPlaybackMode::RepeatAll => Self::RepeatAll,
+        }
+    }
+}
+
+impl From<PlaybackMode> for StoredPlaybackMode {
+    fn from(mode: PlaybackMode) -> Self {
+        match mode {
+            PlaybackMode::Sequential => Self::Sequential,
+            PlaybackMode::Shuffle => Self::Shuffle,
+            PlaybackMode::RepeatOne => Self::RepeatOne,
+            PlaybackMode::RepeatAll => Self::RepeatAll,
+        }
+    }
+}
+
+/// Whether the now-playing cover keeps spinning while the app is backgrounded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum CoverAnimationInBackground {
+    /// Keep spinning while backgrounded.
+    Continue,
+    /// Pause spinning while backgrounded (default).
+    #[default]
+    Pause,
+}
+
+impl CoverAnimationInBackground {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Continue => "continue",
+            Self::Pause => "pause",
+        }
+    }
+
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "continue" => Some(Self::Continue),
+            "pause" => Some(Self::Pause),
+            _ => None,
+        }
+    }
+}
+
 /// Song tags persisted in `catalog.db` (no cover bytes / lyrics).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct SongTags {
@@ -156,6 +206,34 @@ pub(crate) struct SongRow {
     pub path: String,
     pub duration_ms: u64,
     pub tags: SongTags,
+}
+
+impl From<SongRow> for Song {
+    fn from(row: SongRow) -> Self {
+        Self {
+            path: row.path,
+            duration_ms: row.duration_ms,
+            metadata: TrackMetadata {
+                title: row.tags.title,
+                artist: row.tags.artist,
+                album: row.tags.album,
+                album_artist: row.tags.album_artist,
+                composer: row.tags.composer,
+                lyricist: row.tags.lyricist,
+                performer: row.tags.performer,
+                genre: row.tags.genre,
+                comment: row.tags.comment,
+                date: row.tags.date,
+                year: row.tags.year,
+                track_number: row.tags.track_number,
+                track_total: row.tags.track_total,
+                disc_number: row.tags.disc_number,
+                disc_total: row.tags.disc_total,
+                cover: None,
+                lyrics: Vec::new(),
+            },
+        }
+    }
 }
 
 /// Playlist header without songs.

@@ -16,12 +16,13 @@ use super::Catalog;
 use super::models::{Meta, Playlist, PlaylistSong, Song, StoredCoverFileType, StoredPlaylistKind};
 use crate::collection::error::{CatalogDataError, CatalogNumericField, CollectionError};
 use crate::collection::model::{
-    CoverFileType, PlaybackSession, PlaylistId, PlaylistKind, PlaylistRow, SongId, SongRow,
-    SongTags, StoredPlaybackMode,
+    CoverAnimationInBackground, CoverFileType, PlaybackSession, PlaylistId, PlaylistKind,
+    PlaylistRow, SongId, SongRow, SongTags, StoredPlaybackMode,
 };
 
 const SCHEMA_VERSION: &str = "1";
 const PLAYBACK_MODE_KEY: &str = "playback_mode";
+const COVER_ANIMATION_IN_BACKGROUND_KEY: &str = "cover_animation_in_background";
 const VOLUME_KEY: &str = "volume";
 const PLAYBACK_SESSION_KEY: &str = "playback_session";
 const DEFAULT_VOLUME: f64 = 1.0;
@@ -227,8 +228,12 @@ impl CatalogStore {
         }
         Ok(songs_by_id)
     }
+}
 
-    fn playlist_row_from_model(row: Playlist) -> Result<PlaylistRow, CollectionError> {
+impl TryFrom<Playlist> for PlaylistRow {
+    type Error = CollectionError;
+
+    fn try_from(row: Playlist) -> Result<Self, Self::Error> {
         let kind = match row.kind {
             StoredPlaylistKind::Directory => match row.directory_path {
                 Some(path) => PlaylistKind::Directory { path },
@@ -242,12 +247,16 @@ impl CatalogStore {
             kind,
         })
     }
+}
 
-    fn song_row_from_model(row: &Song) -> Result<SongRow, CollectionError> {
+impl TryFrom<&Song> for SongRow {
+    type Error = CollectionError;
+
+    fn try_from(row: &Song) -> Result<Self, Self::Error> {
         Ok(SongRow {
             id: row.id,
             path: row.file_path.clone(),
-            duration_ms: Self::u64_from_i64(row.duration_ms, CatalogNumericField::DurationMs)?,
+            duration_ms: CatalogNumericField::DurationMs.u64_from_i64(row.duration_ms)?,
             tags: SongTags {
                 title: row.title.clone(),
                 artist: row.artist.clone(),
@@ -259,72 +268,16 @@ impl CatalogStore {
                 genre: row.genre.clone(),
                 comment: row.comment.clone(),
                 date: row.date.clone(),
-                year: Self::opt_u16_from_i64(row.year, CatalogNumericField::Year)?,
-                track_number: Self::opt_u64_from_i64(
-                    row.track_number,
-                    CatalogNumericField::TrackNumber,
-                )?,
-                track_total: Self::opt_u64_from_i64(
-                    row.track_total,
-                    CatalogNumericField::TrackTotal,
-                )?,
-                disc_number: Self::opt_u64_from_i64(
-                    row.disc_number,
-                    CatalogNumericField::DiscNumber,
-                )?,
-                disc_total: Self::opt_u64_from_i64(row.disc_total, CatalogNumericField::DiscTotal)?,
+                year: CatalogNumericField::Year.opt_u16_from_i64(row.year)?,
+                track_number: CatalogNumericField::TrackNumber
+                    .opt_u64_from_i64(row.track_number)?,
+                track_total: CatalogNumericField::TrackTotal.opt_u64_from_i64(row.track_total)?,
+                disc_number: CatalogNumericField::DiscNumber.opt_u64_from_i64(row.disc_number)?,
+                disc_total: CatalogNumericField::DiscTotal.opt_u64_from_i64(row.disc_total)?,
                 cover_mime: row.cover_mime.clone(),
-                cover_file_type: row.cover_file_type.map(Self::to_cover_file_type),
+                cover_file_type: row.cover_file_type.map(CoverFileType::from),
             },
         })
-    }
-
-    fn from_cover_file_type(file_type: CoverFileType) -> StoredCoverFileType {
-        match file_type {
-            CoverFileType::Jpg => StoredCoverFileType::Jpg,
-            CoverFileType::Png => StoredCoverFileType::Png,
-            CoverFileType::Webp => StoredCoverFileType::Webp,
-            CoverFileType::Gif => StoredCoverFileType::Gif,
-            CoverFileType::Bin => StoredCoverFileType::Bin,
-        }
-    }
-
-    fn to_cover_file_type(file_type: StoredCoverFileType) -> CoverFileType {
-        match file_type {
-            StoredCoverFileType::Jpg => CoverFileType::Jpg,
-            StoredCoverFileType::Png => CoverFileType::Png,
-            StoredCoverFileType::Webp => CoverFileType::Webp,
-            StoredCoverFileType::Gif => CoverFileType::Gif,
-            StoredCoverFileType::Bin => CoverFileType::Bin,
-        }
-    }
-
-    fn u64_from_i64(value: i64, field: CatalogNumericField) -> Result<u64, CollectionError> {
-        u64::try_from(value).map_err(|_| CatalogDataError::InvalidNumericField(field).into())
-    }
-
-    fn opt_u16_from_i64(
-        value: Option<i64>,
-        field: CatalogNumericField,
-    ) -> Result<Option<u16>, CollectionError> {
-        match value {
-            None => Ok(None),
-            Some(raw) => u16::try_from(raw)
-                .map(Some)
-                .map_err(|_| CatalogDataError::InvalidNumericField(field).into()),
-        }
-    }
-
-    fn opt_u64_from_i64(
-        value: Option<i64>,
-        field: CatalogNumericField,
-    ) -> Result<Option<u64>, CollectionError> {
-        match value {
-            None => Ok(None),
-            Some(raw) => u64::try_from(raw)
-                .map(Some)
-                .map_err(|_| CatalogDataError::InvalidNumericField(field).into()),
-        }
     }
 }
 
@@ -349,8 +302,8 @@ impl Catalog for CatalogStore {
                 .exec(&mut db)
                 .await?;
             rows.into_iter()
-                .map(Self::playlist_row_from_model)
-                .collect()
+                .map(PlaylistRow::try_from)
+                .collect::<Result<Vec<_>, _>>()
         })
         .await
     }
@@ -358,7 +311,7 @@ impl Catalog for CatalogStore {
     async fn playlist_row(&self, id: PlaylistId) -> Result<PlaylistRow, CollectionError> {
         self.run(
             async move |mut db| match Playlist::get_by_id(&mut db, id as i64).await {
-                Ok(row) => Self::playlist_row_from_model(row),
+                Ok(row) => PlaylistRow::try_from(row),
                 Err(err) if err.is_record_not_found() => Err(CollectionError::PlaylistNotFound),
                 Err(err) => Err(err.into()),
             },
@@ -391,7 +344,7 @@ impl Catalog for CatalogStore {
                     );
                     continue;
                 };
-                songs.push(Self::song_row_from_model(song)?);
+                songs.push(SongRow::try_from(song)?);
             }
             tx.commit().await?;
             Ok(songs)
@@ -412,7 +365,7 @@ impl Catalog for CatalogStore {
                     .exec(&mut db)
                     .await?;
                 for row in rows {
-                    songs.push(Self::song_row_from_model(&row)?);
+                    songs.push(SongRow::try_from(&row)?);
                 }
             }
             Ok(songs)
@@ -426,10 +379,7 @@ impl Catalog for CatalogStore {
         name: &str,
         kind: &PlaylistKind,
     ) -> Result<(), CollectionError> {
-        let (stored_kind, directory_path) = match kind {
-            PlaylistKind::Directory { path } => (StoredPlaylistKind::Directory, Some(path.clone())),
-            PlaylistKind::Virtual => (StoredPlaylistKind::Virtual, None),
-        };
+        let (stored_kind, directory_path) = kind.into();
         let name = name.to_owned();
         self.run(async move |mut db| {
             let name = name.clone();
@@ -535,7 +485,7 @@ impl Catalog for CatalogStore {
                 .disc_number(tags.disc_number.map(|value| value as i64))
                 .disc_total(tags.disc_total.map(|value| value as i64))
                 .cover_mime(tags.cover_mime.clone())
-                .cover_file_type(tags.cover_file_type.map(Self::from_cover_file_type))
+                .cover_file_type(tags.cover_file_type.map(StoredCoverFileType::from))
                 .exec(&mut db)
                 .await?;
             Ok(song.id)
@@ -642,7 +592,7 @@ impl Catalog for CatalogStore {
                 if referenced.contains(&song.id) {
                     continue;
                 }
-                let cover_file_type = song.cover_file_type.map(Self::to_cover_file_type);
+                let cover_file_type = song.cover_file_type.map(CoverFileType::from);
                 let song_id = song.id;
                 song.delete().exec(&mut tx).await?;
                 removed.push((song_id, cover_file_type));
@@ -681,6 +631,39 @@ impl Catalog for CatalogStore {
         self.run(async move |mut db| {
             Meta::upsert_by_key(PLAYBACK_MODE_KEY)
                 .value(mode.as_str())
+                .exec(&mut db)
+                .await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn cover_animation_in_background(
+        &self,
+    ) -> Result<CoverAnimationInBackground, CollectionError> {
+        self.run(async |mut db| {
+            match Meta::get_by_key(&mut db, COVER_ANIMATION_IN_BACKGROUND_KEY).await {
+                Ok(meta) => match CoverAnimationInBackground::parse(&meta.value) {
+                    Some(value) => Ok(value),
+                    None => {
+                        meta.delete().exec(&mut db).await?;
+                        Ok(CoverAnimationInBackground::Pause)
+                    }
+                },
+                Err(err) if err.is_record_not_found() => Ok(CoverAnimationInBackground::Pause),
+                Err(err) => Err(err.into()),
+            }
+        })
+        .await
+    }
+
+    async fn set_cover_animation_in_background(
+        &self,
+        value: CoverAnimationInBackground,
+    ) -> Result<(), CollectionError> {
+        self.run(async move |mut db| {
+            Meta::upsert_by_key(COVER_ANIMATION_IN_BACKGROUND_KEY)
+                .value(value.as_str())
                 .exec(&mut db)
                 .await?;
             Ok(())

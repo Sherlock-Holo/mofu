@@ -4,6 +4,7 @@ import 'package:mofu/app/theme.dart';
 import 'package:mofu/features/now_playing/widgets/lyrics_panel.dart';
 import 'package:mofu/features/now_playing/widgets/rotating_cover.dart';
 import 'package:mofu/player/player_controller.dart';
+import 'package:mofu/settings/settings_controller.dart';
 import 'package:mofu/src/rust/api/player.dart';
 import 'package:mofu/widgets/cover_view.dart';
 import 'package:mofu/widgets/playback_bar.dart';
@@ -73,11 +74,7 @@ class _NowPlayingBackground extends StatelessWidget {
       return (player.currentPath, identityHashCode(player.metadata?.cover));
     });
     final cover = context.read<PlayerController>().metadata?.cover;
-    return BlurCoverBackground(
-      key: ValueKey(key),
-      cover: cover,
-      child: child,
-    );
+    return BlurCoverBackground(key: ValueKey(key), cover: cover, child: child);
   }
 }
 
@@ -119,27 +116,31 @@ class _CoverColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     // 须订阅文案与封面身份：切歌后 path 先到、metadata 后到时仍能刷新；
     // progress tick 下这些字段稳定，不会拖累整列重建。
-    final track = context.select<
-      PlayerController,
-      ({
-        String? path,
-        bool playing,
-        String title,
-        String artist,
-        String album,
-        int coverId,
-      })
-    >((player) {
-      return (
-        path: player.currentPath,
-        playing: player.isPlaying,
-        title: player.uiTitle,
-        artist: player.uiArtist,
-        album: player.uiAlbum,
-        coverId: identityHashCode(player.metadata?.cover),
-      );
-    });
+    final track = context
+        .select<
+          PlayerController,
+          ({
+            String? path,
+            bool playing,
+            String title,
+            String artist,
+            String album,
+            int coverId,
+          })
+        >((player) {
+          return (
+            path: player.currentPath,
+            playing: player.isPlaying,
+            title: player.uiTitle,
+            artist: player.uiArtist,
+            album: player.uiAlbum,
+            coverId: identityHashCode(player.metadata?.cover),
+          );
+        });
     final cover = context.read<PlayerController>().metadata?.cover;
+    final pauseWhenInactive = context.select<SettingsController, bool>(
+      (settings) => settings.pauseCoverAnimationInBackground,
+    );
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -148,6 +149,7 @@ class _CoverColumn extends StatelessWidget {
           key: ValueKey(track.path),
           cover: cover,
           playing: track.playing,
+          pauseWhenInactive: pauseWhenInactive,
           size: size,
         ),
         const SizedBox(height: 28),

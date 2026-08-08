@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/src/rust/api/collection.dart';
@@ -26,6 +27,11 @@ class PlaylistSidebar extends StatelessWidget {
                   child: Wrap(
                     spacing: 4,
                     children: [
+                      YaruIconButton(
+                        tooltip: '设置',
+                        onPressed: () => context.push('/settings'),
+                        icon: const Icon(Icons.settings_rounded),
+                      ),
                       YaruIconButton(
                         tooltip: '打开音乐目录',
                         onPressed: collection.loading
