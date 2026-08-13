@@ -309,10 +309,10 @@ mod tests {
     fn progress_tick_marks_kind_and_strips_heavy_fields() {
         let meta = Arc::new(TrackMetadata {
             title: Some("t".into()),
-            cover: Some(CoverArt {
+            cover: Some(Arc::new(CoverArt {
                 mime_type: Some("image/jpeg".into()),
                 data: vec![1, 2, 3, 4],
-            }),
+            })),
             lyrics: vec![],
             ..TrackMetadata::default()
         });

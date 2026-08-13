@@ -76,6 +76,7 @@ class SongTable extends StatelessWidget {
       final song = songs[index];
       final playing = playingPath == song.path;
       return _SongRow(
+        key: ValueKey(song.path),
         index: index,
         song: song,
         playing: playing,
@@ -190,6 +191,7 @@ class _TableHeader extends StatelessWidget {
 
 class _SongRow extends StatelessWidget {
   const _SongRow({
+    super.key,
     required this.index,
     required this.song,
     required this.playing,

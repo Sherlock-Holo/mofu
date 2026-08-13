@@ -135,7 +135,7 @@ impl MediaSession {
             let metadata_changed = meta_cursor.source_changed(meta_ptr, has_metadata);
 
             let cover_url = if metadata_changed {
-                match cover_cache.update(meta_arc.as_ref().and_then(|meta| meta.cover.as_ref())) {
+                match cover_cache.update(meta_arc.as_ref().and_then(|meta| meta.cover.as_deref())) {
                     Ok(url) => url,
                     Err(err) => {
                         warn!(%err, "media session cover cache update failed");

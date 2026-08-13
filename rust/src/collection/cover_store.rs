@@ -24,6 +24,9 @@ impl CoverStore {
         song_id: SongId,
         cover: &CoverArt,
     ) -> Result<CoverFileType, CollectionError> {
+        if cover.data.is_empty() {
+            return Err(CollectionError::EmptyCoverArt);
+        }
         let file_type = CoverFileType::from_mime(cover.mime_type.as_deref());
         let path = self.path_for(song_id, file_type);
         // Drop previous file-type variants before writing the new temp file.

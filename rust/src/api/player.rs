@@ -430,7 +430,7 @@ impl From<&DomainTrackMetadata> for TrackMetadata {
             track_total: value.track_total,
             disc_number: value.disc_number,
             disc_total: value.disc_total,
-            cover: value.cover.as_ref().map(CoverArt::from),
+            cover: value.cover.as_deref().map(CoverArt::from),
             lyrics: value.lyrics.iter().map(Lyrics::from).collect(),
         }
     }

@@ -406,8 +406,10 @@ impl<'a> RevisionMetadata<'a> {
     fn pick_cover(visuals: &[Visual]) -> Option<CoverArt> {
         let preferred = visuals
             .iter()
-            .find(|visual| visual.usage == Some(StandardVisualKey::FrontCover))
-            .or_else(|| visuals.first())?;
+            .find(|visual| {
+                visual.usage == Some(StandardVisualKey::FrontCover) && !visual.data.is_empty()
+            })
+            .or_else(|| visuals.iter().find(|visual| !visual.data.is_empty()))?;
         Some(CoverArt {
             mime_type: preferred.media_type.clone(),
             data: preferred.data.to_vec(),

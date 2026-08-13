@@ -1,17 +1,16 @@
 use std::fs;
 use std::path::Path;
-
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Embedded cover image (raw encoded bytes, typically JPEG/PNG).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoverArt {
     pub mime_type: Option<String>,
     pub data: Vec<u8>,
 }
 
 /// Where lyrics content came from (independent of transport / UI).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LyricsSource {
     /// Embedded in the audio file (ID3 USLT, Vorbis UNSYNCEDLYRICS, etc.).
     Embedded,
@@ -20,7 +19,7 @@ pub enum LyricsSource {
 }
 
 /// One timed lyric line.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricsLine {
     pub start_ms: u64,
     pub end_ms: Option<u64>,
@@ -28,14 +27,14 @@ pub struct LyricsLine {
 }
 
 /// Lyrics body: plain text or timed lines (shared by embedded / file / network).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LyricsContent {
     Plain { text: String },
     Timed { lines: Vec<LyricsLine> },
 }
 
 /// One lyrics track (language / source / content shape).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lyrics {
     pub source: LyricsSource,
     pub language: Option<String>,
@@ -44,7 +43,7 @@ pub struct Lyrics {
 }
 
 /// Tags, cover, and lyrics for the currently open track.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TrackMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
@@ -61,7 +60,7 @@ pub struct TrackMetadata {
     pub track_total: Option<u64>,
     pub disc_number: Option<u64>,
     pub disc_total: Option<u64>,
-    pub cover: Option<CoverArt>,
+    pub cover: Option<Arc<CoverArt>>,
     pub lyrics: Vec<Lyrics>,
 }
 
@@ -142,7 +141,7 @@ impl TrackMetadata {
     /// Keep the first cover art assignment.
     pub(crate) fn set_cover_if_empty(&mut self, cover: CoverArt) {
         if self.cover.is_none() {
-            self.cover = Some(cover);
+            self.cover = Some(Arc::new(cover));
         }
     }
 

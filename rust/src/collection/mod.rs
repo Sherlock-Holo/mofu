@@ -9,13 +9,15 @@ mod store;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use cover_store::CoverStore;
 use directories::ProjectDirs;
 pub use error::CollectionError;
 pub(crate) use model::{CoverAnimationInBackground, StoredPlaybackMode};
 pub use model::{PlaybackSession, Playlist, PlaylistId, PlaylistKind, Song};
-use model::{SongId, SongTags};
+use model::{SongId, SongRow, SongTags};
+use rayon::prelude::*;
 use scan::CollectionScanner;
 use store::{Catalog, CatalogStore};
 
@@ -283,14 +285,43 @@ impl<C: Catalog> Collection<C> {
         }
         let rows = self.catalog.song_rows_for_paths(&paths).await?;
         let mut covers = Vec::new();
+        let mut stale_rows = Vec::new();
         for row in rows {
-            let Some(file_type) = row.tags.cover_file_type else {
+            if let Some(file_type) = row.tags.cover_file_type
+                && let Some(cover) =
+                    self.covers
+                        .read(row.id, file_type, row.tags.cover_mime.clone())
+            {
+                covers.push((row.path, cover));
                 continue;
-            };
-            let Some(cover) = self.covers.read(row.id, file_type, row.tags.cover_mime) else {
-                continue;
-            };
-            covers.push((row.path, cover));
+            }
+            if row.tags.cover_file_type.is_some() {
+                stale_rows.push(row);
+            }
+        }
+
+        if stale_rows.is_empty() {
+            return Ok(covers);
+        }
+
+        let inspector = self.inspector.as_ref();
+        let probed = stale_rows
+            .par_iter()
+            .map(|row| (row.clone(), Self::probe_embedded_cover(inspector, row)))
+            .collect::<Vec<_>>();
+
+        for (row, outcome) in probed {
+            match outcome {
+                Some((cover, metadata)) => {
+                    let file_type = self.covers.write(row.id, &cover)?;
+                    let tags = SongTags::from_metadata(&metadata, Some(file_type));
+                    self.catalog
+                        .upsert_song(&row.path, row.duration_ms, &tags)
+                        .await?;
+                    covers.push((row.path, cover));
+                }
+                None => self.clear_stored_cover(&row).await?,
+            }
         }
         Ok(covers)
     }
@@ -322,16 +353,45 @@ impl<C: Catalog> Collection<C> {
             .catalog
             .upsert_song(&song.path, song.duration_ms, &tags)
             .await?;
-        let cover_file_type = if let Some(cover) = song.metadata.cover.as_ref() {
-            Some(self.covers.write(song_id, cover)?)
-        } else {
-            self.covers.remove_all(song_id);
-            None
+        let cover_file_type = match song
+            .metadata
+            .cover
+            .as_deref()
+            .filter(|cover| !cover.data.is_empty())
+        {
+            Some(cover) => Some(self.covers.write(song_id, cover)?),
+            None => {
+                self.covers.remove_all(song_id);
+                None
+            }
         };
         let tags = SongTags::from_metadata(&song.metadata, cover_file_type);
         self.catalog
             .upsert_song(&song.path, song.duration_ms, &tags)
             .await
+    }
+
+    fn probe_embedded_cover(
+        inspector: &dyn MediaInspector,
+        row: &SongRow,
+    ) -> Option<(CoverArt, TrackMetadata)> {
+        let song = CollectionScanner::new(inspector).inspect_path(Path::new(&row.path))?;
+        let cover = song.metadata.cover.as_deref()?;
+        if cover.data.is_empty() {
+            return None;
+        }
+        Some((cover.clone(), song.metadata))
+    }
+
+    async fn clear_stored_cover(&self, row: &SongRow) -> Result<(), CollectionError> {
+        self.covers.remove_all(row.id);
+        let mut tags = row.tags.clone();
+        tags.cover_mime = None;
+        tags.cover_file_type = None;
+        self.catalog
+            .upsert_song(&row.path, row.duration_ms, &tags)
+            .await?;
+        Ok(())
     }
 
     async fn garbage_collect(&self) -> Result<(), CollectionError> {
@@ -446,10 +506,10 @@ impl<C: Catalog> Collection<C> {
             return Ok(playlists);
         }
 
-        let mut by_path = HashMap::new();
+        let mut by_path: HashMap<String, Arc<CoverArt>> = HashMap::new();
         for chunk in paths.chunks(COVER_HYDRATE_CHUNK_SIZE) {
             for (path, cover) in self.covers_for_paths(chunk.to_vec()).await? {
-                by_path.insert(path, cover);
+                by_path.entry(path).or_insert_with(|| Arc::new(cover));
             }
         }
         if by_path.is_empty() {
@@ -458,8 +518,8 @@ impl<C: Catalog> Collection<C> {
 
         for playlist in &mut playlists {
             for song in &mut playlist.songs {
-                if let Some(cover) = by_path.remove(&song.path) {
-                    song.metadata.cover = Some(cover);
+                if let Some(cover) = by_path.get(&song.path) {
+                    song.metadata.cover = Some(Arc::clone(cover));
                 }
             }
         }
@@ -500,7 +560,7 @@ impl Playlist {
         self.songs.iter().find_map(|song| {
             song.metadata
                 .cover
-                .as_ref()
+                .as_deref()
                 .filter(|cover| !cover.data.is_empty())
         })
     }
@@ -553,6 +613,30 @@ mod tests {
         }
     }
 
+    struct CoverInspector;
+
+    impl MediaInspector for CoverInspector {
+        fn inspect(&self, path: &Path) -> Result<MediaInspection, PlayerError> {
+            let name = path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            Ok(MediaInspection {
+                duration_ms: 42,
+                metadata: TrackMetadata {
+                    title: path
+                        .file_stem()
+                        .map(|name| name.to_string_lossy().into_owned()),
+                    cover: Some(Arc::new(CoverArt {
+                        mime_type: Some("image/jpeg".into()),
+                        data: name.into_bytes(),
+                    })),
+                    ..Default::default()
+                },
+            })
+        }
+    }
+
     struct TestDirs {
         data: PathBuf,
         cache: PathBuf,
@@ -585,6 +669,16 @@ mod tests {
             dirs.data.clone(),
             dirs.cache.clone(),
             Box::new(FakeInspector),
+        )
+        .await
+        .expect("open collection")
+    }
+
+    async fn open_cover_collection(dirs: &TestDirs) -> Collection {
+        Collection::open_with_inspector(
+            dirs.data.clone(),
+            dirs.cache.clone(),
+            Box::new(CoverInspector),
         )
         .await
         .expect("open collection")
@@ -1135,6 +1229,181 @@ mod tests {
     }
 
     #[test]
+    fn cover_store_rejects_empty_cover_bytes() {
+        let dirs = TestDirs::new();
+        let store = CoverStore::open(dirs.cache.clone()).expect("open");
+        let err = store
+            .write(
+                1,
+                &CoverArt {
+                    mime_type: None,
+                    data: vec![],
+                },
+            )
+            .expect_err("empty cover");
+        assert!(matches!(err, CollectionError::EmptyCoverArt));
+    }
+
+    #[test]
+    fn refresh_clears_stale_cover_when_file_has_none() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let media = dirs.data.join("song.mp3");
+            fs::write(&media, b"fake").expect("write media");
+            let playlist_id = {
+                let collection = open_cover_collection(&dirs).await;
+                let playlist = collection
+                    .create_virtual("List".into())
+                    .await
+                    .expect("create");
+                collection
+                    .add_files(playlist.id, vec![media.clone()])
+                    .await
+                    .expect("add");
+                assert!(
+                    fs::read_dir(&dirs.cache)
+                        .expect("cache dir")
+                        .flatten()
+                        .any(|entry| entry.metadata().is_ok_and(|meta| meta.len() > 0)),
+                    "cover cache should be written on import"
+                );
+                playlist.id
+            };
+
+            let collection = open_test_collection(&dirs).await;
+            collection
+                .refresh(playlist_id)
+                .await
+                .expect("refresh without embedded cover");
+            assert!(
+                fs::read_dir(&dirs.cache)
+                    .expect("cache dir")
+                    .flatten()
+                    .all(|entry| entry.metadata().is_ok_and(|meta| meta.len() == 0)),
+                "stale cover cache should be removed on refresh"
+            );
+        });
+    }
+
+    #[test]
+    fn hydrate_clears_cover_ext_when_reextract_fails() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let media = dirs.data.join("song.mp3");
+            fs::write(&media, b"fake").expect("write media");
+            {
+                let collection = open_cover_collection(&dirs).await;
+                let playlist = collection
+                    .create_virtual("List".into())
+                    .await
+                    .expect("create");
+                collection
+                    .add_files(playlist.id, vec![media.clone()])
+                    .await
+                    .expect("add");
+            }
+
+            let collection = open_test_collection(&dirs).await;
+            for entry in fs::read_dir(&dirs.cache).expect("cache dir") {
+                let path = entry.expect("entry").path();
+                if path.is_file() {
+                    fs::write(&path, []).expect("empty cover");
+                }
+            }
+
+            collection
+                .library_snapshot_with_covers()
+                .await
+                .expect("hydrate");
+
+            let catalog = CatalogStore::open(&dirs.data.join(CATALOG_FILE_NAME))
+                .await
+                .expect("open catalog");
+            let rows = catalog
+                .song_rows_for_paths(&[media.to_string_lossy().into_owned()])
+                .await
+                .expect("lookup song");
+            let row = rows.into_iter().next().expect("song row");
+            assert!(row.tags.cover_file_type.is_none());
+        });
+    }
+
+    #[test]
+    fn hydrate_rewrites_empty_cover_cache() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let media = dirs.data.join("art.mp3");
+            fs::write(&media, b"fake").expect("write media");
+            let collection = open_cover_collection(&dirs).await;
+            let playlist = collection
+                .create_virtual("Covers".into())
+                .await
+                .expect("create");
+            collection
+                .add_files(playlist.id, vec![media])
+                .await
+                .expect("add");
+            for entry in fs::read_dir(&dirs.cache).expect("cache dir") {
+                let path = entry.expect("entry").path();
+                if path.is_file() {
+                    fs::write(&path, []).expect("empty cover");
+                }
+            }
+            let playlists = collection
+                .library_snapshot_with_covers()
+                .await
+                .expect("hydrate");
+            let cover = playlists[0].songs[0]
+                .metadata
+                .cover
+                .as_ref()
+                .expect("re-extracted cover");
+            assert!(!cover.data.is_empty());
+        });
+    }
+
+    #[test]
+    fn snapshot_with_covers_keeps_artwork_on_shared_songs() {
+        async_global_executor::block_on(async {
+            let dirs = TestDirs::new();
+            let music = dirs.data.join("music");
+            fs::create_dir_all(&music).expect("music dir");
+            let first = music.join("first.mp3");
+            let second = music.join("second.mp3");
+            fs::write(&first, b"fake").expect("write first");
+            fs::write(&second, b"fake").expect("write second");
+
+            let collection = open_cover_collection(&dirs).await;
+            let directory = collection.add_directory(music).await.expect("directory");
+            let virtual_list = collection
+                .create_virtual("测试".into())
+                .await
+                .expect("virtual");
+            collection
+                .import_from_playlist(virtual_list.id, directory.id, Vec::new())
+                .await
+                .expect("import");
+
+            let playlists = collection
+                .library_snapshot_with_covers()
+                .await
+                .expect("hydrate");
+            assert_eq!(playlists.len(), 2);
+            for playlist in &playlists {
+                assert_eq!(playlist.songs.len(), 2, "{}", playlist.name);
+                for song in &playlist.songs {
+                    let cover = song
+                        .metadata
+                        .cover
+                        .as_ref()
+                        .expect("cover should be hydrated");
+                    assert!(!cover.data.is_empty(), "empty cover for {}", song.path);
+                }
+            }
+        });
+    }
+
+    #[test]
     fn playlist_cover_picks_first_non_empty() {
         let playlist = Playlist {
             id: 1,
@@ -1150,10 +1419,10 @@ mod tests {
                     path: "/b.mp3".into(),
                     duration_ms: 1,
                     metadata: TrackMetadata {
-                        cover: Some(CoverArt {
+                        cover: Some(Arc::new(CoverArt {
                             mime_type: Some("image/jpeg".into()),
                             data: vec![1, 2, 3],
-                        }),
+                        })),
                         ..Default::default()
                     },
                 },

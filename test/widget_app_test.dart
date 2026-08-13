@@ -263,6 +263,63 @@ void main() {
       expect(find.text('奶油云'), findsNothing);
     });
 
+    testWidgets('song rows bind each track cover, not only the first', (
+      tester,
+    ) async {
+      final firstCover = _cover([1, 2, 3, 4]);
+      final secondCover = _cover([5, 6, 7, 8]);
+      final playlist = Playlist(
+        id: BigInt.one,
+        name: '测试ttt',
+        kind: PlaylistKind.virtual,
+        cover: firstCover,
+        songs: [
+          Song(
+            path: '/music/a.mp3',
+            durationMs: BigInt.from(180000),
+            displayTitle: '毕业前夕',
+            metadata: _meta(title: '毕业前夕', cover: firstCover),
+          ),
+          Song(
+            path: '/music/b.mp3',
+            durationMs: BigInt.from(180000),
+            displayTitle: '暗恋',
+            metadata: _meta(title: '暗恋', cover: secondCover),
+          ),
+        ],
+      );
+      final collection = CollectionController.fake(
+        playlists: [playlist],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake();
+
+      await _pumpApp(tester, collection: collection, player: player);
+
+      expect(
+        tester
+            .widget<CoverView>(
+              find.descendant(
+                of: find.byKey(const ValueKey('/music/a.mp3')),
+                matching: find.byType(CoverView),
+              ),
+            )
+            .cover,
+        firstCover,
+      );
+      expect(
+        tester
+            .widget<CoverView>(
+              find.descendant(
+                of: find.byKey(const ValueKey('/music/b.mp3')),
+                matching: find.byType(CoverView),
+              ),
+            )
+            .cover,
+        secondCover,
+      );
+    });
+
     testWidgets('empty virtual playlist shows add-files action', (
       tester,
     ) async {

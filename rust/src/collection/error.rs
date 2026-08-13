@@ -84,6 +84,8 @@ pub enum CollectionError {
     NotVirtualPlaylist,
     #[error("playlist name cannot be empty")]
     EmptyPlaylistName,
+    #[error("cover art bytes cannot be empty")]
+    EmptyCoverArt,
 }
 
 impl CollectionError {
