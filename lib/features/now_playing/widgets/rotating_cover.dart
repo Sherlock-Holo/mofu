@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mofu/app/theme.dart';
@@ -46,8 +47,14 @@ class _RotatingCoverState extends State<RotatingCover>
 
   double _dpr = 1;
   ui.Image? _coverImage;
-  Object? _readyBakeKey;
-  Object? _inflightBakeKey;
+  CoverArt? _readyCover;
+  CoverArt? _inflightCover;
+  double? _readySize;
+  double? _readyDpr;
+  double? _inflightSize;
+  double? _inflightDpr;
+  bool _hasReadyBake = false;
+  bool _hasInflightBake = false;
   int _bakeGen = 0;
 
   @override
@@ -73,7 +80,8 @@ class _RotatingCoverState extends State<RotatingCover>
   void didUpdateWidget(covariant RotatingCover oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncPlayback();
-    if (oldWidget.cover != widget.cover || oldWidget.size != widget.size) {
+    if (oldWidget.size != widget.size ||
+        !_sameCoverArt(oldWidget.cover, widget.cover)) {
       _requestBake();
     }
   }
@@ -140,27 +148,56 @@ class _RotatingCoverState extends State<RotatingCover>
     }
   }
 
-  Object _bakeKey() => (widget.size, _dpr, identityHashCode(widget.cover));
-
   void _requestBake() {
-    final key = _bakeKey();
-    if (key == _readyBakeKey) {
+    if (_bakeMatches(
+      active: _hasReadyBake,
+      cover: _readyCover,
+      size: _readySize,
+      dpr: _readyDpr,
+    )) {
       return;
     }
-    if (key == _inflightBakeKey) {
+    if (_bakeMatches(
+      active: _hasInflightBake,
+      cover: _inflightCover,
+      size: _inflightSize,
+      dpr: _inflightDpr,
+    )) {
       return;
     }
-    _inflightBakeKey = key;
+    _hasInflightBake = true;
+    _inflightCover = widget.cover;
+    _inflightSize = widget.size;
+    _inflightDpr = _dpr;
     final gen = ++_bakeGen;
-    unawaited(_bake(gen: gen, key: key));
+    unawaited(
+      _bake(gen: gen, cover: widget.cover, size: widget.size, dpr: _dpr),
+    );
   }
 
-  Future<void> _bake({required int gen, required Object key}) async {
+  bool _bakeMatches({
+    required bool active,
+    required CoverArt? cover,
+    required double? size,
+    required double? dpr,
+  }) {
+    return active &&
+        size == widget.size &&
+        dpr == _dpr &&
+        _sameCoverArt(cover, widget.cover);
+  }
+
+  Future<void> _bake({
+    required int gen,
+    required CoverArt? cover,
+    required double size,
+    required double dpr,
+  }) async {
     ui.Image? coverImage;
     try {
-      final pixel = (widget.size * _dpr).round().clamp(1, 4096);
+      final pixel = (size * dpr).round().clamp(1, 4096);
       final coverPx = (pixel * 0.72).round().clamp(1, 4096);
-      coverImage = await _decodeCover(widget.cover, coverPx);
+      coverImage = await _decodeCover(cover, coverPx);
     } catch (_) {
       coverImage?.dispose();
       coverImage = null;
@@ -170,16 +207,36 @@ class _RotatingCoverState extends State<RotatingCover>
       coverImage?.dispose();
       return;
     }
-    if (_inflightBakeKey == key) {
-      _inflightBakeKey = null;
-    }
+    _hasInflightBake = false;
+    _inflightCover = null;
+    _inflightSize = null;
+    _inflightDpr = null;
 
     final previous = _coverImage;
     setState(() {
       _coverImage = coverImage;
-      _readyBakeKey = key;
+      _readyCover = cover;
+      _readySize = size;
+      _readyDpr = dpr;
+      _hasReadyBake = true;
     });
     previous?.dispose();
+  }
+
+  static bool _sameCoverArt(CoverArt? left, CoverArt? right) {
+    if (identical(left, right)) {
+      return true;
+    }
+    if (left == null || right == null) {
+      return false;
+    }
+    if (left.mimeType != right.mimeType) {
+      return false;
+    }
+    if (identical(left.data, right.data)) {
+      return true;
+    }
+    return listEquals(left.data, right.data);
   }
 
   static Future<ui.Image?> _decodeCover(CoverArt? cover, int targetPx) async {
@@ -247,7 +304,10 @@ class _RotatingCoverState extends State<RotatingCover>
                 );
               },
             ),
-            CustomPaint(size: Size.square(size), painter: _PinPainter(dpr: _dpr)),
+            CustomPaint(
+              size: Size.square(size),
+              painter: _PinPainter(dpr: _dpr),
+            ),
           ],
         ),
       ),
@@ -331,7 +391,11 @@ class _DiscBaker {
   }) {
     final center = Offset(pixelSize / 2, pixelSize / 2);
     final pinRadius = pixelSize / 2 * 0.12;
-    canvas.drawCircle(center, pinRadius, Paint()..color = StrawberryCream.cream);
+    canvas.drawCircle(
+      center,
+      pinRadius,
+      Paint()..color = StrawberryCream.cream,
+    );
     canvas.drawCircle(
       center,
       pinRadius,

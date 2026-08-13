@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +15,7 @@ import 'package:mofu/settings/settings_controller.dart';
 import 'package:mofu/src/rust/api/app.dart';
 import 'package:mofu/src/rust/api/collection.dart';
 import 'package:mofu/src/rust/api/player.dart';
+import 'package:mofu/widgets/cover_view.dart';
 import 'package:mofu/widgets/playback_bar.dart';
 import 'package:mofu/widgets/playback_mode_button.dart';
 import 'package:provider/provider.dart';
@@ -21,14 +24,20 @@ TrackMetadata _meta({
   String? title,
   String? artist,
   String? album,
+  CoverArt? cover,
   List<Lyrics> lyrics = const [],
 }) {
   return TrackMetadata(
     title: title,
     artist: artist,
     album: album,
+    cover: cover,
     lyrics: lyrics,
   );
+}
+
+CoverArt _cover(List<int> bytes) {
+  return CoverArt(mimeType: 'image/jpeg', data: Uint8List.fromList(bytes));
 }
 
 Song _song({
@@ -100,6 +109,7 @@ PlayerSnapshot _playingSnapshot({
   BigInt? positionMs,
   PlaybackMode mode = PlaybackMode.sequential,
   PlayerState state = PlayerState.playing,
+  CoverArt? cover,
 }) {
   return PlayerSnapshot(
     kind: PlayerSnapshotKind.full,
@@ -123,6 +133,7 @@ PlayerSnapshot _playingSnapshot({
       title: '草莓糖',
       artist: '奶油乐队',
       album: '甜点',
+      cover: cover,
       lyrics: _timedLyrics(),
     ),
   );
@@ -497,6 +508,68 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(_coverTurns(tester), paused);
       expect(player.isPlaying, isFalse);
+    });
+
+    testWidgets('keeps artwork widgets when pause clones the same cover', (
+      tester,
+    ) async {
+      final original = _cover(List<int>.generate(32, (i) => i));
+      final player = PlayerController.fake(
+        snapshot: _playingSnapshot(cover: original),
+      );
+      await _pumpNowPlaying(tester, player: player);
+
+      final rotating = tester.state(find.byType(RotatingCover));
+      final blur = tester.element(find.byType(BlurCoverBackground));
+
+      player.emitSnapshot(
+        _playingSnapshot(
+          state: PlayerState.paused,
+          cover: _cover(List<int>.generate(32, (i) => i)),
+        ),
+      );
+      await tester.pump();
+
+      expect(identical(player.metadata?.cover, original), isTrue);
+      expect(
+        identical(tester.state(find.byType(RotatingCover)), rotating),
+        isTrue,
+      );
+      expect(
+        identical(tester.element(find.byType(BlurCoverBackground)), blur),
+        isTrue,
+      );
+    });
+  });
+
+  group('PlayerController', () {
+    test('reuses cover instance when a full snapshot has the same bytes', () {
+      final original = _cover([1, 2, 3, 4]);
+      final player = PlayerController.fake(
+        snapshot: _playingSnapshot(cover: original),
+      );
+
+      player.emitSnapshot(
+        _playingSnapshot(
+          state: PlayerState.paused,
+          cover: _cover([1, 2, 3, 4]),
+        ),
+      );
+
+      expect(identical(player.metadata?.cover, original), isTrue);
+      expect(player.isPlaying, isFalse);
+    });
+
+    test('replaces cover when bytes change', () {
+      final original = _cover([1, 2, 3, 4]);
+      final next = _cover([5, 6, 7, 8]);
+      final player = PlayerController.fake(
+        snapshot: _playingSnapshot(cover: original),
+      );
+
+      player.emitSnapshot(_playingSnapshot(cover: next));
+
+      expect(identical(player.metadata?.cover, next), isTrue);
     });
   });
 

@@ -116,10 +116,7 @@ class PlayerController extends ChangeNotifier {
         if (_disposed) {
           return;
         }
-        _snapshot = _retainHeavyFields(_snapshot, next);
-        _error = null;
-        _retry = null;
-        notifyListeners();
+        _applySnapshot(next);
       },
       onError: (Object err) {
         if (_disposed) {
@@ -132,38 +129,43 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
-  /// Progress ticks use [PlayerSnapshotKind.progress]; retain heavy fields for the same path.
+  void _applySnapshot(PlayerSnapshot next) {
+    _snapshot = _retainHeavyFields(_snapshot, next);
+    _error = null;
+    _retry = null;
+    notifyListeners();
+  }
+
+  /// Keep cover/lyrics object identity when the track is unchanged.
+  ///
+  /// Progress ticks omit those fields. Full snapshots (play/pause) clone them
+  /// across FFI; reusing the previous instances avoids tearing down the
+  /// now-playing artwork widgets.
   static PlayerSnapshot _retainHeavyFields(
     PlayerSnapshot? previous,
     PlayerSnapshot next,
   ) {
-    if (previous == null || next.kind != PlayerSnapshotKind.progress) {
-      return next;
-    }
-    if (previous.currentPath != next.currentPath) {
+    if (previous == null || previous.currentPath != next.currentPath) {
       return next;
     }
 
+    if (next.kind == PlayerSnapshotKind.progress) {
+      return _retainProgressFields(previous, next);
+    }
+
+    return _retainUnchangedHeavyFields(previous, next);
+  }
+
+  static PlayerSnapshot _retainProgressFields(
+    PlayerSnapshot previous,
+    PlayerSnapshot next,
+  ) {
     final prevMeta = previous.metadata;
     final nextMeta = next.metadata;
     final TrackMetadata? mergedMeta;
     if (prevMeta != null && nextMeta != null) {
-      mergedMeta = TrackMetadata(
-        title: nextMeta.title,
-        artist: nextMeta.artist,
-        album: nextMeta.album,
-        albumArtist: nextMeta.albumArtist,
-        composer: nextMeta.composer,
-        lyricist: nextMeta.lyricist,
-        performer: nextMeta.performer,
-        genre: nextMeta.genre,
-        comment: nextMeta.comment,
-        date: nextMeta.date,
-        year: nextMeta.year,
-        trackNumber: nextMeta.trackNumber,
-        trackTotal: nextMeta.trackTotal,
-        discNumber: nextMeta.discNumber,
-        discTotal: nextMeta.discTotal,
+      mergedMeta = _copyMetadata(
+        nextMeta,
         cover: prevMeta.cover,
         lyrics: prevMeta.lyrics,
       );
@@ -180,14 +182,88 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
+  static PlayerSnapshot _retainUnchangedHeavyFields(
+    PlayerSnapshot previous,
+    PlayerSnapshot next,
+  ) {
+    final prevMeta = previous.metadata;
+    final nextMeta = next.metadata;
+    if (prevMeta == null || nextMeta == null) {
+      return next;
+    }
+
+    final cover = _sameCoverArt(prevMeta.cover, nextMeta.cover)
+        ? prevMeta.cover
+        : nextMeta.cover;
+    final lyrics = _sameLyrics(prevMeta.lyrics, nextMeta.lyrics)
+        ? prevMeta.lyrics
+        : nextMeta.lyrics;
+    if (identical(cover, nextMeta.cover) &&
+        identical(lyrics, nextMeta.lyrics)) {
+      return next;
+    }
+
+    return _copy(
+      next,
+      metadata: _copyMetadata(nextMeta, cover: cover, lyrics: lyrics),
+    );
+  }
+
+  static TrackMetadata _copyMetadata(
+    TrackMetadata source, {
+    required CoverArt? cover,
+    required List<Lyrics> lyrics,
+  }) {
+    return TrackMetadata(
+      title: source.title,
+      artist: source.artist,
+      album: source.album,
+      albumArtist: source.albumArtist,
+      composer: source.composer,
+      lyricist: source.lyricist,
+      performer: source.performer,
+      genre: source.genre,
+      comment: source.comment,
+      date: source.date,
+      year: source.year,
+      trackNumber: source.trackNumber,
+      trackTotal: source.trackTotal,
+      discNumber: source.discNumber,
+      discTotal: source.discTotal,
+      cover: cover,
+      lyrics: lyrics,
+    );
+  }
+
+  static bool _sameCoverArt(CoverArt? left, CoverArt? right) {
+    if (identical(left, right)) {
+      return true;
+    }
+    if (left == null || right == null) {
+      return false;
+    }
+    if (left.mimeType != right.mimeType) {
+      return false;
+    }
+    if (identical(left.data, right.data)) {
+      return true;
+    }
+    return listEquals(left.data, right.data);
+  }
+
+  static bool _sameLyrics(List<Lyrics> left, List<Lyrics> right) {
+    if (identical(left, right)) {
+      return true;
+    }
+    return listEquals(left, right);
+  }
+
   @visibleForTesting
   void emitSnapshot(PlayerSnapshot snapshot) {
     if (_disposed) {
       return;
     }
-    _snapshot = snapshot;
-    _error = null;
-    notifyListeners();
+    _applySnapshot(snapshot);
   }
 
   void _run(void Function(App app) action, {required String command}) {

@@ -69,12 +69,13 @@ class _NowPlayingBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // path + cover 身份：元数据晚到时也要重建；progress tick 保留同一 cover 引用则跳过。
-    final key = context.select<PlayerController, (String?, int)>((player) {
+    // 订阅 path + cover 身份：元数据晚到时刷新背景。不要用 ValueKey 绑封面身份，
+    // 否则 play/pause 的新 CoverArt 实例会拆掉整棵子树，磨砂玻璃和唱盘都会闪。
+    context.select<PlayerController, (String?, int)>((player) {
       return (player.currentPath, identityHashCode(player.metadata?.cover));
     });
     final cover = context.read<PlayerController>().metadata?.cover;
-    return BlurCoverBackground(key: ValueKey(key), cover: cover, child: child);
+    return BlurCoverBackground(cover: cover, child: child);
   }
 }
 
