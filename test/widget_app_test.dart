@@ -187,27 +187,33 @@ TextStyle _styleAround(WidgetTester tester, Finder finder) {
   return DefaultTextStyle.of(tester.element(finder)).style;
 }
 
-Matrix4 _coverMatrix(WidgetTester tester) {
-  final transform = tester.widget<Transform>(
+double _coverTurns(WidgetTester tester) {
+  final paint = tester.widget<CustomPaint>(
     find.descendant(
       of: find.byType(RotatingCover),
-      matching: find.byType(Transform),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is CustomPaint && widget.painter is RotatingCoverPainter,
+      ),
     ),
   );
-  return Matrix4.copy(transform.transform);
+  return (paint.painter! as RotatingCoverPainter).turns;
 }
 
-/// 等到旋转 Transform 建立后再断言角度。
+/// 等到旋转封面建立后再断言角度。
 Future<void> _waitForRotatingCover(WidgetTester tester) async {
-  final transform = find.descendant(
+  final cover = find.descendant(
     of: find.byType(RotatingCover),
-    matching: find.byType(Transform),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is CustomPaint && widget.painter is RotatingCoverPainter,
+    ),
   );
-  for (var i = 0; i < 20 && transform.evaluate().isEmpty; i++) {
+  for (var i = 0; i < 20 && cover.evaluate().isEmpty; i++) {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
   }
-  expect(transform, findsOneWidget);
+  expect(cover, findsOneWidget);
 }
 
 void main() {
@@ -480,16 +486,16 @@ void main() {
 
       expect(find.byType(RotatingCover), findsOneWidget);
 
-      final before = _coverMatrix(tester);
+      final before = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 2));
-      expect(_coverMatrix(tester).storage, isNot(before.storage));
+      expect(_coverTurns(tester), isNot(before));
 
       await tester.tap(find.byIcon(Icons.pause_rounded));
       await tester.pump();
 
-      final paused = _coverMatrix(tester);
+      final paused = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 2));
-      expect(_coverMatrix(tester).storage, paused.storage);
+      expect(_coverTurns(tester), paused);
       expect(player.isPlaying, isFalse);
     });
   });
@@ -528,9 +534,9 @@ void main() {
       );
       await _waitForRotatingCover(tester);
 
-      final first = _coverMatrix(tester);
+      final first = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 3));
-      expect(_coverMatrix(tester).storage, isNot(first.storage));
+      expect(_coverTurns(tester), isNot(first));
 
       await tester.pumpWidget(
         const MaterialApp(
@@ -542,9 +548,9 @@ void main() {
         ),
       );
       await _waitForRotatingCover(tester);
-      final paused = _coverMatrix(tester);
+      final paused = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 3));
-      expect(_coverMatrix(tester).storage, paused.storage);
+      expect(_coverTurns(tester), paused);
     });
 
     testWidgets('does not spin after track change while app is inactive', (
@@ -585,9 +591,9 @@ void main() {
       );
       await _waitForRotatingCover(tester);
 
-      final afterTrackChange = _coverMatrix(tester);
+      final afterTrackChange = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 3));
-      expect(_coverMatrix(tester).storage, afterTrackChange.storage);
+      expect(_coverTurns(tester), afterTrackChange);
     });
 
     testWidgets('keeps spinning in background when pauseWhenInactive is false', (
@@ -609,14 +615,14 @@ void main() {
       );
       await _waitForRotatingCover(tester);
 
-      final before = _coverMatrix(tester);
+      final before = _coverTurns(tester);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump();
       // Frames are disabled while paused; advance wall time then resume to paint.
       await tester.pump(const Duration(seconds: 3));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
-      expect(_coverMatrix(tester).storage, isNot(before.storage));
+      expect(_coverTurns(tester), isNot(before));
     });
 
     testWidgets('stops in background when pauseWhenInactive is true', (
@@ -640,10 +646,10 @@ void main() {
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump();
-      final paused = _coverMatrix(tester);
+      final paused = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 3));
       // Still paused: timer is cancelled so the angle stays frozen.
-      expect(_coverMatrix(tester).storage, paused.storage);
+      expect(_coverTurns(tester), paused);
     });
   });
 
@@ -767,13 +773,13 @@ void main() {
       await _pumpNowPlaying(tester, player: player, settings: settings);
       await _waitForRotatingCover(tester);
 
-      final before = _coverMatrix(tester);
+      final before = _coverTurns(tester);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump();
       await tester.pump(const Duration(seconds: 2));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
-      expect(_coverMatrix(tester).storage, isNot(before.storage));
+      expect(_coverTurns(tester), isNot(before));
     });
 
     testWidgets('now playing stops in background with default pause setting', (
@@ -786,9 +792,9 @@ void main() {
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump();
-      final paused = _coverMatrix(tester);
+      final paused = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 2));
-      expect(_coverMatrix(tester).storage, paused.storage);
+      expect(_coverTurns(tester), paused);
     });
   });
 }

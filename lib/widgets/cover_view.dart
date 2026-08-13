@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:mofu/app/theme.dart';
@@ -97,10 +98,10 @@ class _CoverPlaceholder extends StatelessWidget {
   }
 }
 
-/// 低分辨率封面背景 + 粉白遮罩；无封面时用同色系渐变。
+/// 磨砂玻璃封面背景 + 粉白遮罩；无封面时用同色系渐变。
 ///
-/// 通过低分辨率解码后双线性放大近似柔化效果，避免动画期间反复执行
-/// 全屏 [ImageFiltered]。
+/// 背景层按曲目缓存，不随封面旋转重绘，因此可以用 [ImageFiltered]
+/// 做一次全屏高斯模糊。
 class BlurCoverBackground extends StatelessWidget {
   const BlurCoverBackground({super.key, required this.cover, this.child});
 
@@ -113,24 +114,33 @@ class BlurCoverBackground extends StatelessWidget {
     final hasCover = bytes != null && bytes.isNotEmpty;
     final mediaSize = MediaQuery.sizeOf(context);
     final dpr = MediaQuery.devicePixelRatioOf(context).clamp(1.0, 2.0);
-    // 约 1/8 线性尺寸；放大后的平滑插值自然形成柔化背景。
-    final cacheWidth = (mediaSize.width * dpr / 8).round().clamp(64, 256);
-    final cacheHeight = (mediaSize.height * dpr / 8).round().clamp(64, 256);
+    // 低分辨率解码降低模糊成本；只约束一边以保留整张封面。
+    final cachePx = (mediaSize.longestSide * dpr / 16).round().clamp(48, 128);
 
     return Stack(
       fit: StackFit.expand,
       children: [
         RepaintBoundary(
           child: hasCover
-              ? Image.memory(
-                  bytes,
-                  fit: BoxFit.cover,
-                  cacheWidth: cacheWidth,
-                  cacheHeight: cacheHeight,
-                  gaplessPlayback: true,
-                  filterQuality: FilterQuality.medium,
-                  errorBuilder: (_, _, _) =>
-                      const ColoredBox(color: StrawberryCream.creamDeep),
+              ? ClipRect(
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: 48,
+                      sigmaY: 48,
+                      tileMode: TileMode.clamp,
+                    ),
+                    child: Image.memory(
+                      bytes,
+                      width: mediaSize.width,
+                      height: mediaSize.height,
+                      fit: BoxFit.fill,
+                      cacheWidth: cachePx,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (_, _, _) =>
+                          const ColoredBox(color: StrawberryCream.creamDeep),
+                    ),
+                  ),
                 )
               : const DecoratedBox(
                   decoration: BoxDecoration(
