@@ -5,9 +5,9 @@
 [English](README.en.md)
 
 <p align="center">
-  <img src="assets/main.png" alt="首页" width="45%" />
+  <img src="resources/main.png" alt="首页" width="45%" />
   &nbsp;
-  <img src="assets/playing.png" alt="正在播放" width="45%" />
+  <img src="resources/playing.png" alt="正在播放" width="45%" />
 </p>
 
 ## 功能

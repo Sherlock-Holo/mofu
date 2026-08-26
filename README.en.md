@@ -5,9 +5,9 @@ Local music player.
 [中文](README.md)
 
 <p align="center">
-  <img src="assets/main.png" alt="Home" width="45%" />
+  <img src="resources/main.png" alt="Home" width="45%" />
   &nbsp;
-  <img src="assets/playing.png" alt="Now playing" width="45%" />
+  <img src="resources/playing.png" alt="Now playing" width="45%" />
 </p>
 
 ## Features
