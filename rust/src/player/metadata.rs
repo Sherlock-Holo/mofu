@@ -64,6 +64,77 @@ pub struct TrackMetadata {
     pub lyrics: Vec<Lyrics>,
 }
 
+impl LyricsContent {
+    /// Parse conventional LRC into timed lines, otherwise keep the raw text.
+    pub(crate) fn from_text(text: String) -> Self {
+        LrcDocument::parse(&text)
+            .map(|lines| Self::Timed { lines })
+            .unwrap_or(Self::Plain { text })
+    }
+
+    /// Index of the active timed line at `position_ms`, if this body is timed.
+    pub(crate) fn active_line_index(&self, position_ms: u64) -> Option<usize> {
+        let LyricsContent::Timed { lines } = self else {
+            return None;
+        };
+        if lines.is_empty() {
+            return None;
+        }
+        let mut active = 0usize;
+        for (index, line) in lines.iter().enumerate() {
+            if line.start_ms <= position_ms {
+                active = index;
+            } else {
+                break;
+            }
+        }
+        Some(active)
+    }
+
+    /// Serialize this body back to conventional LRC (or the original plain text).
+    pub(crate) fn to_lrc_text(&self) -> String {
+        match self {
+            Self::Plain { text } => text.clone(),
+            Self::Timed { lines } => {
+                let mut out = String::new();
+                for line in lines {
+                    out.push('[');
+                    out.push_str(&format_lrc_timestamp(line.start_ms));
+                    out.push(']');
+                    out.push_str(&line.text);
+                    out.push('\n');
+                }
+                out
+            }
+        }
+    }
+}
+
+fn format_lrc_timestamp(ms: u64) -> String {
+    let hours = ms / 3_600_000;
+    let minutes = (ms / 60_000) % 60;
+    let seconds = (ms / 1_000) % 60;
+    let millis = ms % 1_000;
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}.{millis:03}")
+    } else {
+        format!("{minutes:02}:{seconds:02}.{millis:03}")
+    }
+}
+
+impl Lyrics {
+    /// Prefer the first non-empty timed track, otherwise the first entry.
+    pub(crate) fn preferred(tracks: &[Self]) -> Option<&Self> {
+        tracks
+            .iter()
+            .find(|lyrics| match &lyrics.content {
+                LyricsContent::Timed { lines } => !lines.is_empty(),
+                LyricsContent::Plain { text } => !text.is_empty(),
+            })
+            .or_else(|| tracks.first())
+    }
+}
+
 impl TrackMetadata {
     /// Display title with path basename fallback when the tag is missing/blank.
     pub fn display_title(path: &str, title: Option<&str>) -> String {
@@ -83,22 +154,9 @@ impl TrackMetadata {
 
     /// Index of the active timed lyric line at `position_ms`, if any.
     pub fn active_lyrics_line_index(&self, position_ms: u64) -> Option<usize> {
-        let lines = self
-            .lyrics
-            .iter()
-            .find_map(|lyrics| match &lyrics.content {
-                LyricsContent::Timed { lines } if !lines.is_empty() => Some(lines.as_slice()),
-                _ => None,
-            })?;
-        let mut active = 0usize;
-        for (index, line) in lines.iter().enumerate() {
-            if line.start_ms <= position_ms {
-                active = index;
-            } else {
-                break;
-            }
-        }
-        Some(active)
+        Lyrics::preferred(&self.lyrics)?
+            .content
+            .active_line_index(position_ms)
     }
 
     /// Keep the first non-empty assignment for a single-valued text field.
@@ -178,9 +236,7 @@ impl TrackMetadata {
         if text.is_empty() {
             return;
         }
-        let content = LrcDocument::parse(&text)
-            .map(|lines| LyricsContent::Timed { lines })
-            .unwrap_or(LyricsContent::Plain { text });
+        let content = LyricsContent::from_text(text);
         self.lyrics.push(Lyrics {
             source: LyricsSource::Embedded,
             language,
@@ -208,9 +264,7 @@ impl TrackMetadata {
         if text.trim().is_empty() {
             return;
         }
-        let content = LrcDocument::parse(&text)
-            .map(|lines| LyricsContent::Timed { lines })
-            .unwrap_or(LyricsContent::Plain { text });
+        let content = LyricsContent::from_text(text);
         self.lyrics.push(Lyrics {
             source: LyricsSource::ExternalFile,
             language: None,
@@ -429,5 +483,28 @@ mod tests {
         assert_eq!(metadata.active_lyrics_line_index(0), Some(0));
         assert_eq!(metadata.active_lyrics_line_index(1500), Some(1));
         assert_eq!(TrackMetadata::default().active_lyrics_line_index(0), None);
+    }
+
+    #[test]
+    fn to_lrc_text_round_trips_timed_and_plain() {
+        let original = "[00:01.200]hello\n[01:02.000]world\n[1:00:00.000]hour\n";
+        let parsed = LyricsContent::from_text(original.into());
+        let rendered = parsed.to_lrc_text();
+        let reparsed = LyricsContent::from_text(rendered.clone());
+        let LyricsContent::Timed { lines } = reparsed else {
+            panic!("expected timed lyrics");
+        };
+        assert_eq!(lines[0].start_ms, 1_200);
+        assert_eq!(lines[0].text, "hello");
+        assert_eq!(lines[1].start_ms, 62_000);
+        assert_eq!(lines[2].start_ms, 3_600_000);
+        assert_eq!(
+            LyricsContent::Plain {
+                text: "plain".into()
+            }
+            .to_lrc_text(),
+            "plain"
+        );
+        assert!(rendered.contains("[00:01.200]hello"));
     }
 }
