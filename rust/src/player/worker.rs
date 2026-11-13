@@ -61,6 +61,8 @@ impl DecodeWorker {
                 RecvCommand::Command(cmd) => self.handle_command(cmd),
             }
 
+            self.check_output_health();
+
             if !self.progress.state().is_playing() {
                 continue;
             }
@@ -104,6 +106,31 @@ impl DecodeWorker {
         }
     }
 
+    fn check_output_health(&mut self) {
+        let Some(out) = self.output.as_ref() else {
+            return;
+        };
+        while let Some(err) = out.next_stream_event() {
+            warn!(%err, "cpal stream event");
+        }
+        let xruns = out.take_xruns();
+        if xruns > 0 {
+            warn!(
+                xruns,
+                "audio buffer underrun or overrun; backend recovery attempted"
+            );
+        }
+        if out.stream_failed() {
+            error!("audio stream failed; paused, next play will reopen the output");
+            self.pause_failed_output();
+        }
+    }
+
+    fn pause_failed_output(&mut self) {
+        self.output = None;
+        self.progress.set_state(PlaybackState::Paused);
+    }
+
     fn handle_command(&mut self, cmd: PlayerCommand) {
         match cmd {
             PlayerCommand::Shutdown => unreachable!("shutdown is handled by the run loop"),
@@ -111,6 +138,9 @@ impl DecodeWorker {
                 let _ = reply.send(self.open_media(path));
             }
             PlayerCommand::Play { reply } => {
+                // A stream can fail while paused, when this worker is waiting
+                // for a command. Drop it before resuming so one click reopens.
+                self.check_output_health();
                 if self.session.is_some() {
                     self.progress.set_state(PlaybackState::Playing);
                 }
@@ -276,7 +306,7 @@ impl DecodeWorker {
                 Ok(())
             }
             Err(err) => {
-                warn!(%err, "player seek failed");
+                warn!(%err, requested_position_ms = position.as_millis(), duration_ms = active.duration_ms(), "player seek failed");
                 Err(err)
             }
         }
@@ -369,4 +399,31 @@ impl DecodeWorker {
 
 fn is_unexpected_eof(err: &PlayerError) -> bool {
     matches!(err, PlayerError::Io(io_err) if io_err.kind() == ErrorKind::UnexpectedEof)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_failure_pauses_without_losing_track_or_position() {
+        let (_, rx) = flume::unbounded();
+        let (progress, _notify) = SharedProgress::new();
+        let progress = Arc::new(progress);
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tone.flac");
+        let mut worker = DecodeWorker {
+            cmd_rx: rx,
+            progress: progress.clone(),
+            session: Some(DecoderSession::open(&path).unwrap()),
+            output: None,
+            queue: PlaybackQueue::new(),
+        };
+        progress.set_position_ms(500);
+        progress.set_state(PlaybackState::Playing);
+        worker.pause_failed_output();
+        assert_eq!(progress.state(), PlaybackState::Paused);
+        assert_eq!(progress.snapshot().position, Duration::from_millis(500));
+        assert!(worker.session.is_some());
+        assert!(worker.output.is_none());
+    }
 }

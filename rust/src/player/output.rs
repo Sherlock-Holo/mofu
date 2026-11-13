@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -8,11 +8,11 @@ use cpal::{
     BufferSize, ChannelCount, Device, Error as CpalError, ErrorKind, FromSample, SampleFormat,
     SizedSample, Stream, StreamConfig, SupportedStreamConfig,
 };
+use flume::{Receiver, Sender};
 use rtrb::chunks::ChunkError;
 use rtrb::{Consumer, Producer, RingBuffer};
 use rubato::audioadapter_buffers::direct::InterleavedSlice;
 use rubato::{Fft, FixedSync, Resampler};
-use tracing::error;
 
 use super::error::{OutputError, PlayerError};
 use super::format::AudioFormat;
@@ -25,6 +25,24 @@ pub enum WriteStatus {
     Drained,
     /// Ring was full; remaining samples stay buffered for a later flush.
     Pending,
+}
+
+/// Error callbacks only publish flags; the decode worker owns logging and
+/// stream teardown. ALSA recovers Xruns itself, unlike persistent I/O failures.
+#[derive(Default)]
+struct StreamHealth {
+    failed: AtomicBool,
+    xruns: AtomicU64,
+}
+
+impl StreamHealth {
+    fn record(&self, kind: ErrorKind) {
+        if kind == ErrorKind::Xrun {
+            self.xruns.fetch_add(1, Ordering::Relaxed);
+        } else if !matches!(kind, ErrorKind::DeviceChanged | ErrorKind::RealtimeDenied) {
+            self.failed.store(true, Ordering::Release);
+        }
+    }
 }
 
 /// Coordinates draining stale samples after a seek without blocking the realtime callback for long.
@@ -129,6 +147,8 @@ impl RateConverter {
 /// CPAL-backed output: decode thread writes into a lock-free ring; the stream callback only reads.
 pub(crate) struct CpalOutput {
     producer: Producer<f32>,
+    health: Arc<StreamHealth>,
+    events: Receiver<CpalError>,
     flush: Arc<FlushGate>,
     _stream: Stream,
     converter: Option<RateConverter>,
@@ -171,17 +191,37 @@ impl CpalOutput {
         let (producer, consumer) = RingBuffer::<f32>::new(ring_capacity);
         let flush = Arc::new(FlushGate::new());
         let callback_flush = flush.clone();
+        let health = Arc::new(StreamHealth::default());
+        let (event_tx, events) = flume::bounded(16);
 
         let stream = match default_config.sample_format() {
-            SampleFormat::F32 => {
-                build_stream::<f32>(&device, &config, consumer, callback_flush, volume)?
-            }
-            SampleFormat::I16 => {
-                build_stream::<i16>(&device, &config, consumer, callback_flush, volume)?
-            }
-            SampleFormat::U16 => {
-                build_stream::<u16>(&device, &config, consumer, callback_flush, volume)?
-            }
+            SampleFormat::F32 => build_stream::<f32>(
+                &device,
+                &config,
+                consumer,
+                callback_flush,
+                volume,
+                health.clone(),
+                event_tx,
+            )?,
+            SampleFormat::I16 => build_stream::<i16>(
+                &device,
+                &config,
+                consumer,
+                callback_flush,
+                volume,
+                health.clone(),
+                event_tx,
+            )?,
+            SampleFormat::U16 => build_stream::<u16>(
+                &device,
+                &config,
+                consumer,
+                callback_flush,
+                volume,
+                health.clone(),
+                event_tx,
+            )?,
             _ => return Err(OutputError::UnsupportedSampleFormat.into()),
         };
 
@@ -195,12 +235,26 @@ impl CpalOutput {
 
         Ok(Self {
             producer,
+            health,
+            events,
             flush,
             _stream: stream,
             converter,
             ring_pending: Vec::new(),
             scratch: Vec::new(),
         })
+    }
+
+    pub(crate) fn next_stream_event(&self) -> Option<CpalError> {
+        self.events.try_recv().ok()
+    }
+
+    pub(crate) fn stream_failed(&self) -> bool {
+        self.health.failed.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn take_xruns(&self) -> u64 {
+        self.health.xruns.swap(0, Ordering::Relaxed)
     }
 
     /// Enqueue samples and push as many as possible into the ring without blocking.
@@ -321,12 +375,19 @@ fn build_stream<T>(
     mut consumer: Consumer<f32>,
     flush: Arc<FlushGate>,
     volume: Arc<SharedVolume>,
+    health: Arc<StreamHealth>,
+    events: Sender<CpalError>,
 ) -> Result<Stream, PlayerError>
 where
     T: SizedSample + FromSample<f32>,
 {
     let mut local_flush = 0_u64;
-    let err_fn = |err| error!(%err, "cpal stream error");
+    let err_fn = move |err: CpalError| {
+        health.record(err.kind());
+        // Bound diagnostics too: a failing backend must not flood memory or
+        // block its callback. The fatal flag is independent of queue capacity.
+        let _ = events.try_send(err);
+    };
 
     device
         .build_output_stream(
@@ -349,4 +410,23 @@ where
             None,
         )
         .map_err(|err| map_cpal_error(err).into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xruns_are_recoverable_but_io_failure_remains_latched() {
+        let health = StreamHealth::default();
+        health.record(ErrorKind::DeviceChanged);
+        health.record(ErrorKind::RealtimeDenied);
+        health.record(ErrorKind::Xrun);
+        assert!(!health.failed.load(Ordering::Acquire));
+        assert_eq!(health.xruns.swap(0, Ordering::Relaxed), 1);
+        health.record(ErrorKind::BackendError);
+        health.record(ErrorKind::Xrun);
+        assert!(health.failed.load(Ordering::Acquire));
+        assert_eq!(health.xruns.load(Ordering::Relaxed), 1);
+    }
 }
