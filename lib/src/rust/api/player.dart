@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `list_from`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Player>>
 abstract class Player implements RustOpaqueInterface {
@@ -92,6 +92,25 @@ class CoverArt {
           data == other.data;
 }
 
+/// Preview lyrics the UI should render instead of official `metadata.lyrics`.
+class EffectiveLyrics {
+  final BigInt previewId;
+  final LyricsContent content;
+
+  const EffectiveLyrics({required this.previewId, required this.content});
+
+  @override
+  int get hashCode => previewId.hashCode ^ content.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EffectiveLyrics &&
+          runtimeType == other.runtimeType &&
+          previewId == other.previewId &&
+          content == other.content;
+}
+
 /// One lyrics track for Flutter FFI.
 class Lyrics {
   final LyricsSource source;
@@ -122,6 +141,54 @@ class Lyrics {
           language == other.language &&
           description == other.description &&
           content == other.content;
+}
+
+/// One lyrics candidate row. The lyric body stays in the Rust session.
+class LyricsCandidateSnapshot {
+  final BigInt id;
+  final String provider;
+  final String providerLabel;
+  final String title;
+  final String artist;
+  final BigInt? durationMs;
+  final bool synced;
+  final bool? instrumental;
+
+  const LyricsCandidateSnapshot({
+    required this.id,
+    required this.provider,
+    required this.providerLabel,
+    required this.title,
+    required this.artist,
+    this.durationMs,
+    required this.synced,
+    this.instrumental,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      provider.hashCode ^
+      providerLabel.hashCode ^
+      title.hashCode ^
+      artist.hashCode ^
+      durationMs.hashCode ^
+      synced.hashCode ^
+      instrumental.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LyricsCandidateSnapshot &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          provider == other.provider &&
+          providerLabel == other.providerLabel &&
+          title == other.title &&
+          artist == other.artist &&
+          durationMs == other.durationMs &&
+          synced == other.synced &&
+          instrumental == other.instrumental;
 }
 
 /// Lyrics body for Flutter FFI.
@@ -175,6 +242,49 @@ class LyricsLine {
           text == other.text;
 }
 
+/// Session status for a lyrics search shown in the candidate panel.
+enum LyricsSearchStatus { searching, ready, noResults, failed }
+
+/// Active lyrics search/preview session for Flutter.
+class LyricsSessionSnapshot {
+  final BigInt sessionId;
+  final String targetPath;
+  final LyricsSearchStatus status;
+  final List<LyricsCandidateSnapshot> candidates;
+  final BigInt? previewId;
+  final String? errorMessage;
+
+  const LyricsSessionSnapshot({
+    required this.sessionId,
+    required this.targetPath,
+    required this.status,
+    required this.candidates,
+    this.previewId,
+    this.errorMessage,
+  });
+
+  @override
+  int get hashCode =>
+      sessionId.hashCode ^
+      targetPath.hashCode ^
+      status.hashCode ^
+      candidates.hashCode ^
+      previewId.hashCode ^
+      errorMessage.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LyricsSessionSnapshot &&
+          runtimeType == other.runtimeType &&
+          sessionId == other.sessionId &&
+          targetPath == other.targetPath &&
+          status == other.status &&
+          candidates == other.candidates &&
+          previewId == other.previewId &&
+          errorMessage == other.errorMessage;
+}
+
 /// Lyrics source for Flutter FFI.
 enum LyricsSource { embedded, externalFile }
 
@@ -206,6 +316,13 @@ class PlayerSnapshot {
   /// Active timed lyric line index for `position_ms`, when available.
   final BigInt? activeLyricsLine;
 
+  /// Active lyrics search/preview session. `None` when no session is open.
+  final LyricsSessionSnapshot? lyricsSession;
+
+  /// Preview body to render when the session target is the current track.
+  /// `None` means the UI should keep using official `metadata.lyrics`.
+  final EffectiveLyrics? effectiveLyrics;
+
   /// Playlist that sourced the current main queue, when known.
   final BigInt? sourcePlaylistId;
 
@@ -228,6 +345,8 @@ class PlayerSnapshot {
     this.currentPath,
     this.displayTitle,
     this.activeLyricsLine,
+    this.lyricsSession,
+    this.effectiveLyrics,
     this.sourcePlaylistId,
     required this.queue,
     required this.upNext,
@@ -247,6 +366,8 @@ class PlayerSnapshot {
       currentPath.hashCode ^
       displayTitle.hashCode ^
       activeLyricsLine.hashCode ^
+      lyricsSession.hashCode ^
+      effectiveLyrics.hashCode ^
       sourcePlaylistId.hashCode ^
       queue.hashCode ^
       upNext.hashCode ^
@@ -268,6 +389,8 @@ class PlayerSnapshot {
           currentPath == other.currentPath &&
           displayTitle == other.displayTitle &&
           activeLyricsLine == other.activeLyricsLine &&
+          lyricsSession == other.lyricsSession &&
+          effectiveLyrics == other.effectiveLyrics &&
           sourcePlaylistId == other.sourcePlaylistId &&
           queue == other.queue &&
           upNext == other.upNext &&

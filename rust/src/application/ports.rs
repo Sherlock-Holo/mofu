@@ -230,6 +230,7 @@ pub(crate) trait PlayerPort: Send + Sync + 'static {
         start_index: Option<usize>,
         autoplay: bool,
     ) -> Result<(), PlayerError>;
+    fn play_index(&self, index: usize) -> Result<(), PlayerError>;
     fn play(&self) -> Result<(), PlayerError>;
     fn pause(&self) -> Result<(), PlayerError>;
     fn stop(&self) -> Result<(), PlayerError>;
@@ -260,6 +261,10 @@ impl PlayerPort for PlayerAdapter {
         autoplay: bool,
     ) -> Result<(), PlayerError> {
         self.inner.set_queue(paths, start_index, autoplay)
+    }
+
+    fn play_index(&self, index: usize) -> Result<(), PlayerError> {
+        self.inner.play_index(index)
     }
 
     fn play(&self) -> Result<(), PlayerError> {

@@ -41,6 +41,13 @@ class PlayerController extends ChangeNotifier {
   String? get currentPath => _snapshot?.currentPath;
   String? get displayTitle => _snapshot?.displayTitle;
   BigInt? get activeLyricsLine => _snapshot?.activeLyricsLine;
+  LyricsSessionSnapshot? get lyricsSession => _snapshot?.lyricsSession;
+  EffectiveLyrics? get effectiveLyrics => _snapshot?.effectiveLyrics;
+
+  /// Follow-up confirm state after Rust reports an existing-file or stem conflict.
+  LyricsConfirmResult? get pendingLyricsConfirm => _pendingLyricsConfirm;
+  LyricsConfirmResult? _pendingLyricsConfirm;
+  LyricsConfirmResult? _stubbedConfirmResult;
 
   /// UI title: snapshot [displayTitle], else tag title, else idle placeholder.
   String get uiTitle {
@@ -131,6 +138,9 @@ class PlayerController extends ChangeNotifier {
 
   void _applySnapshot(PlayerSnapshot next) {
     _snapshot = _retainHeavyFields(_snapshot, next);
+    if (_snapshot?.lyricsSession == null) {
+      _pendingLyricsConfirm = null;
+    }
     _error = null;
     _retry = null;
     notifyListeners();
@@ -179,6 +189,8 @@ class PlayerController extends ChangeNotifier {
       queue: previous.queue,
       upNext: previous.upNext,
       metadata: mergedMeta,
+      lyricsSession: previous.lyricsSession,
+      effectiveLyrics: previous.effectiveLyrics,
     );
   }
 
@@ -198,14 +210,24 @@ class PlayerController extends ChangeNotifier {
     final lyrics = _sameLyrics(prevMeta.lyrics, nextMeta.lyrics)
         ? prevMeta.lyrics
         : nextMeta.lyrics;
+    final lyricsSession = previous.lyricsSession == next.lyricsSession
+        ? previous.lyricsSession
+        : next.lyricsSession;
+    final effectiveLyrics = previous.effectiveLyrics == next.effectiveLyrics
+        ? previous.effectiveLyrics
+        : next.effectiveLyrics;
     if (identical(cover, nextMeta.cover) &&
-        identical(lyrics, nextMeta.lyrics)) {
+        identical(lyrics, nextMeta.lyrics) &&
+        identical(lyricsSession, next.lyricsSession) &&
+        identical(effectiveLyrics, next.effectiveLyrics)) {
       return next;
     }
 
     return _copy(
       next,
       metadata: _copyMetadata(nextMeta, cover: cover, lyrics: lyrics),
+      lyricsSession: lyricsSession,
+      effectiveLyrics: effectiveLyrics,
     );
   }
 
@@ -463,6 +485,147 @@ class PlayerController extends ChangeNotifier {
     return playPlaylist(playlistId: playlistId, startPath: path);
   }
 
+  /// Forward a lyrics search for [path]. Rust owns matching and session state.
+  Future<void> lyricsSearch(String path) async {
+    if (_disposed) {
+      return;
+    }
+    if (_fake) {
+      recordedCommands.add('lyricsSearch:$path');
+      notifyListeners();
+      return;
+    }
+    final app = _app;
+    if (app == null) {
+      _error = '播放器仍在初始化';
+      notifyListeners();
+      return;
+    }
+    try {
+      await app.lyricsSearch(path: path);
+      if (_disposed) {
+        return;
+      }
+      _error = null;
+      _retry = null;
+    } catch (err) {
+      if (_disposed) {
+        return;
+      }
+      _error = err.toString();
+      _retry = () {
+        unawaited(lyricsSearch(path));
+      };
+      notifyListeners();
+    }
+  }
+
+  void lyricsPreview({required BigInt sessionId, required BigInt candidateId}) {
+    _run(
+      (app) =>
+          app.lyricsPreview(sessionId: sessionId, candidateId: candidateId),
+      command: 'lyricsPreview:$sessionId:$candidateId',
+    );
+  }
+
+  void lyricsCancel({required BigInt sessionId}) {
+    _pendingLyricsConfirm = null;
+    _run(
+      (app) => app.lyricsCancel(sessionId: sessionId),
+      command: 'lyricsCancel:$sessionId',
+    );
+  }
+
+  void lyricsPlayAndPreview({required BigInt sessionId, required String path}) {
+    _run(
+      (app) => app.lyricsPlayAndPreview(sessionId: sessionId, path: path),
+      command: 'lyricsPlayAndPreview:$sessionId:$path',
+    );
+  }
+
+  /// Test hook: next fake [lyricsConfirm] returns this result.
+  @visibleForTesting
+  void stubLyricsConfirmResult(LyricsConfirmResult result) {
+    _stubbedConfirmResult = result;
+  }
+
+  Future<LyricsConfirmResult?> lyricsConfirm({
+    required BigInt sessionId,
+    required BigInt candidateId,
+    required LyricsConfirmAction action,
+  }) async {
+    if (_disposed) {
+      return null;
+    }
+    if (_fake) {
+      recordedCommands.add(
+        'lyricsConfirm:$sessionId:$candidateId:${action.name}',
+      );
+      final result =
+          _stubbedConfirmResult ??
+          LyricsConfirmResult(
+            kind: LyricsConfirmResultKind.saved,
+            audioPath: currentPath ?? '',
+            conflictingAudio: const [],
+          );
+      _stubbedConfirmResult = null;
+      if (result.kind == LyricsConfirmResultKind.saved) {
+        _pendingLyricsConfirm = null;
+      } else {
+        _pendingLyricsConfirm = result;
+      }
+      notifyListeners();
+      return result;
+    }
+    final app = _app;
+    if (app == null) {
+      _error = '播放器仍在初始化';
+      notifyListeners();
+      return null;
+    }
+    try {
+      final result = await app.lyricsConfirm(
+        sessionId: sessionId,
+        candidateId: candidateId,
+        action: action,
+      );
+      if (_disposed) {
+        return result;
+      }
+      _error = null;
+      _retry = null;
+      if (result.kind == LyricsConfirmResultKind.saved) {
+        _pendingLyricsConfirm = null;
+      } else {
+        _pendingLyricsConfirm = result;
+      }
+      notifyListeners();
+      return result;
+    } catch (err) {
+      if (_disposed) {
+        return null;
+      }
+      final message = err.toString();
+      // Cancel / a replacement search may abandon an in-flight persist.
+      // That is not a user-facing player error, even if a new session is live.
+      if (message.contains('lyrics confirm was abandoned')) {
+        return null;
+      }
+      _error = message;
+      _retry = () {
+        unawaited(
+          lyricsConfirm(
+            sessionId: sessionId,
+            candidateId: candidateId,
+            action: action,
+          ),
+        );
+      };
+      notifyListeners();
+      return null;
+    }
+  }
+
   void retryLastError() {
     if (_disposed) {
       return;
@@ -506,6 +669,8 @@ PlayerSnapshot _copy(
   List<QueueItem>? queue,
   List<QueueItem>? upNext,
   Object? metadata = _unset,
+  Object? lyricsSession = _unset,
+  Object? effectiveLyrics = _unset,
 }) {
   return PlayerSnapshot(
     kind: kind ?? current.kind,
@@ -535,5 +700,11 @@ PlayerSnapshot _copy(
     metadata: identical(metadata, _unset)
         ? current.metadata
         : metadata as TrackMetadata?,
+    lyricsSession: identical(lyricsSession, _unset)
+        ? current.lyricsSession
+        : lyricsSession as LyricsSessionSnapshot?,
+    effectiveLyrics: identical(effectiveLyrics, _unset)
+        ? current.effectiveLyrics
+        : effectiveLyrics as EffectiveLyrics?,
   );
 }

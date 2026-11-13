@@ -8,7 +8,7 @@ import 'collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'player.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<App>>
 abstract class App implements RustOpaqueInterface {
@@ -32,6 +32,27 @@ abstract class App implements RustOpaqueInterface {
     required BigInt sourceId,
     required List<String> paths,
   });
+
+  /// Discard the session and restore official lyrics.
+  void lyricsCancel({required BigInt sessionId});
+
+  /// Confirm the selected in-memory candidate. May return a conflict that needs a follow-up action.
+  ///
+  /// File IO runs off the FFI thread so playback controls stay responsive.
+  Future<LyricsConfirmResult> lyricsConfirm({
+    required BigInt sessionId,
+    required BigInt candidateId,
+    required LyricsConfirmAction action,
+  });
+
+  /// Play the session target without cancelling preview.
+  void lyricsPlayAndPreview({required BigInt sessionId, required String path});
+
+  /// Select a candidate as the unsaved preview.
+  void lyricsPreview({required BigInt sessionId, required BigInt candidateId});
+
+  /// Start a lyrics search session.
+  Future<BigInt> lyricsSearch({required String path});
 
   void next();
 
@@ -138,3 +159,53 @@ class LibrarySnapshot {
           playlists == other.playlists &&
           coversHydrated == other.coversHydrated;
 }
+
+/// Authorized persist action for a confirmed lyrics candidate.
+enum LyricsConfirmAction { save, replaceExistingSidecar, preferDataDir }
+
+/// Structured confirm result, including conflict state and the authorized follow-up action.
+class LyricsConfirmResult {
+  final LyricsConfirmResultKind kind;
+  final String audioPath;
+  final String? savedPath;
+  final bool? storedInDataDir;
+  final bool? replacedExisting;
+  final String? sidecarPath;
+  final List<String> conflictingAudio;
+
+  const LyricsConfirmResult({
+    required this.kind,
+    required this.audioPath,
+    this.savedPath,
+    this.storedInDataDir,
+    this.replacedExisting,
+    this.sidecarPath,
+    required this.conflictingAudio,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      audioPath.hashCode ^
+      savedPath.hashCode ^
+      storedInDataDir.hashCode ^
+      replacedExisting.hashCode ^
+      sidecarPath.hashCode ^
+      conflictingAudio.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LyricsConfirmResult &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          audioPath == other.audioPath &&
+          savedPath == other.savedPath &&
+          storedInDataDir == other.storedInDataDir &&
+          replacedExisting == other.replacedExisting &&
+          sidecarPath == other.sidecarPath &&
+          conflictingAudio == other.conflictingAudio;
+}
+
+/// Flattened confirm result so Dart generation does not require Freezed.
+enum LyricsConfirmResultKind { saved, needsReplace, needsStemCollisionAck }

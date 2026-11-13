@@ -5,12 +5,18 @@ use std::thread;
 
 use crate::api::collection::{Playlist, PlaylistKind, Song};
 use crate::api::player::{
-    CoverArt, PlaybackMode, PlayerSnapshot, PlayerSnapshotKind, PlayerState, QueueItem,
-    TrackMetadata,
+    CoverArt, EffectiveLyrics, LyricsCandidateSnapshot, LyricsContent, LyricsSearchStatus,
+    LyricsSessionSnapshot, PlaybackMode, PlayerSnapshot, PlayerSnapshotKind, PlayerState,
+    QueueItem, TrackMetadata,
 };
 use crate::application::{
-    Application, BootstrapSnapshot as DomainBootstrap, LibrarySnapshot as DomainLibrary,
-    PlayerView, PlayerViewKind, PlaylistView, SongView,
+    Application, BootstrapSnapshot as DomainBootstrap, EffectiveLyrics as DomainEffectiveLyrics,
+    LibrarySnapshot as DomainLibrary, LyricsCandidateId, LyricsCandidateView,
+    LyricsConfirmAction as DomainLyricsConfirmAction,
+    LyricsConfirmOutcome as DomainLyricsConfirmOutcome, LyricsSaveLocation,
+    LyricsSearchStatus as DomainLyricsSearchStatus, LyricsSessionId,
+    LyricsSessionSnapshot as DomainLyricsSessionSnapshot, PlayerView, PlayerViewKind, PlaylistView,
+    SongView,
 };
 use crate::collection::CoverAnimationInBackground as DomainCoverAnimation;
 use crate::collection::PlaylistKind as DomainPlaylistKind;
@@ -134,6 +140,62 @@ impl App {
     #[flutter_rust_bridge::frb(sync)]
     pub fn enqueue_next(&self, path: String) -> Result<(), String> {
         self.inner.enqueue_next(path).map_err(|err| err.to_string())
+    }
+
+    /// Start a lyrics search session.
+    pub async fn lyrics_search(&self, path: String) -> Result<u64, String> {
+        self.inner
+            .lyrics_search(path)
+            .await
+            .map(|id| id.get())
+            .map_err(|err| err.to_string())
+    }
+
+    /// Select a candidate as the unsaved preview.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn lyrics_preview(&self, session_id: u64, candidate_id: u64) -> Result<(), String> {
+        self.inner
+            .lyrics_preview(
+                LyricsSessionId::from_raw(session_id),
+                LyricsCandidateId::from_raw(candidate_id),
+            )
+            .map_err(|err| err.to_string())
+    }
+
+    /// Discard the session and restore official lyrics.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn lyrics_cancel(&self, session_id: u64) -> Result<(), String> {
+        self.inner
+            .lyrics_cancel(LyricsSessionId::from_raw(session_id))
+            .map_err(|err| err.to_string())
+    }
+
+    /// Play the session target without cancelling preview.
+    #[flutter_rust_bridge::frb(sync)]
+    pub fn lyrics_play_and_preview(&self, session_id: u64, path: String) -> Result<(), String> {
+        self.inner
+            .lyrics_play_and_preview(LyricsSessionId::from_raw(session_id), path)
+            .map_err(|err| err.to_string())
+    }
+
+    /// Confirm the selected in-memory candidate. May return a conflict that needs a follow-up action.
+    ///
+    /// File IO runs off the FFI thread so playback controls stay responsive.
+    pub async fn lyrics_confirm(
+        &self,
+        session_id: u64,
+        candidate_id: u64,
+        action: LyricsConfirmAction,
+    ) -> Result<LyricsConfirmResult, String> {
+        self.inner
+            .lyrics_confirm(
+                LyricsSessionId::from_raw(session_id),
+                LyricsCandidateId::from_raw(candidate_id),
+                DomainLyricsConfirmAction::from(action),
+            )
+            .await
+            .map(LyricsConfirmResult::from)
+            .map_err(|err| err.to_string())
     }
 
     pub async fn play_playlist(
@@ -334,6 +396,11 @@ impl From<PlayerView> for PlayerSnapshot {
             current_path: value.current_path,
             display_title: value.display_title,
             active_lyrics_line: value.active_lyrics_line,
+            lyrics_session: value
+                .lyrics_session
+                .as_deref()
+                .map(LyricsSessionSnapshot::from),
+            effective_lyrics: value.effective_lyrics.as_deref().map(EffectiveLyrics::from),
             source_playlist_id: value.source_playlist_id,
             queue: value
                 .queue
@@ -355,6 +422,140 @@ impl From<PlayerView> for PlayerSnapshot {
                 .metadata
                 .as_ref()
                 .map(|meta| TrackMetadata::from(meta.as_ref())),
+        }
+    }
+}
+
+/// Authorized persist action for a confirmed lyrics candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LyricsConfirmAction {
+    Save,
+    ReplaceExistingSidecar,
+    PreferDataDir,
+}
+
+impl From<LyricsConfirmAction> for DomainLyricsConfirmAction {
+    fn from(value: LyricsConfirmAction) -> Self {
+        match value {
+            LyricsConfirmAction::Save => Self::Save,
+            LyricsConfirmAction::ReplaceExistingSidecar => Self::ReplaceExistingSidecar,
+            LyricsConfirmAction::PreferDataDir => Self::PreferDataDir,
+        }
+    }
+}
+
+/// Flattened confirm result so Dart generation does not require Freezed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LyricsConfirmResultKind {
+    Saved,
+    NeedsReplace,
+    NeedsStemCollisionAck,
+}
+
+/// Structured confirm result, including conflict state and the authorized follow-up action.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LyricsConfirmResult {
+    pub kind: LyricsConfirmResultKind,
+    pub audio_path: String,
+    pub saved_path: Option<String>,
+    pub stored_in_data_dir: Option<bool>,
+    pub replaced_existing: Option<bool>,
+    pub sidecar_path: Option<String>,
+    pub conflicting_audio: Vec<String>,
+}
+
+impl From<DomainLyricsConfirmOutcome> for LyricsConfirmResult {
+    fn from(value: DomainLyricsConfirmOutcome) -> Self {
+        match value {
+            DomainLyricsConfirmOutcome::Saved(info) => Self {
+                kind: LyricsConfirmResultKind::Saved,
+                audio_path: info.audio_path,
+                saved_path: Some(info.saved_path.to_string_lossy().into_owned()),
+                stored_in_data_dir: Some(info.location == LyricsSaveLocation::DataDir),
+                replaced_existing: Some(info.replaced_existing),
+                sidecar_path: None,
+                conflicting_audio: Vec::new(),
+            },
+            DomainLyricsConfirmOutcome::NeedsReplace {
+                audio_path,
+                sidecar_path,
+            } => Self {
+                kind: LyricsConfirmResultKind::NeedsReplace,
+                audio_path,
+                saved_path: None,
+                stored_in_data_dir: None,
+                replaced_existing: None,
+                sidecar_path: Some(sidecar_path.to_string_lossy().into_owned()),
+                conflicting_audio: Vec::new(),
+            },
+            DomainLyricsConfirmOutcome::NeedsStemCollisionAck {
+                audio_path,
+                sidecar_path,
+                conflicting_audio,
+            } => Self {
+                kind: LyricsConfirmResultKind::NeedsStemCollisionAck,
+                audio_path,
+                saved_path: None,
+                stored_in_data_dir: None,
+                replaced_existing: None,
+                sidecar_path: Some(sidecar_path.to_string_lossy().into_owned()),
+                conflicting_audio: conflicting_audio
+                    .into_iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect(),
+            },
+        }
+    }
+}
+
+impl From<DomainLyricsSearchStatus> for LyricsSearchStatus {
+    fn from(value: DomainLyricsSearchStatus) -> Self {
+        match value {
+            DomainLyricsSearchStatus::Searching => Self::Searching,
+            DomainLyricsSearchStatus::Ready => Self::Ready,
+            DomainLyricsSearchStatus::NoResults => Self::NoResults,
+            DomainLyricsSearchStatus::Failed => Self::Failed,
+        }
+    }
+}
+
+impl From<&LyricsCandidateView> for LyricsCandidateSnapshot {
+    fn from(value: &LyricsCandidateView) -> Self {
+        Self {
+            id: value.id.get(),
+            provider: value.provider.as_str().to_owned(),
+            provider_label: value.provider_label.to_owned(),
+            title: value.title.clone(),
+            artist: value.artist.clone(),
+            duration_ms: value.duration_ms,
+            synced: value.synced,
+            instrumental: value.instrumental,
+        }
+    }
+}
+
+impl From<&DomainLyricsSessionSnapshot> for LyricsSessionSnapshot {
+    fn from(value: &DomainLyricsSessionSnapshot) -> Self {
+        Self {
+            session_id: value.session_id.get(),
+            target_path: value.target_path.clone(),
+            status: value.status.into(),
+            candidates: value
+                .candidates
+                .iter()
+                .map(LyricsCandidateSnapshot::from)
+                .collect(),
+            preview_id: value.preview_id.map(|id| id.get()),
+            error_message: value.error_message.clone(),
+        }
+    }
+}
+
+impl From<&DomainEffectiveLyrics> for EffectiveLyrics {
+    fn from(value: &DomainEffectiveLyrics) -> Self {
+        Self {
+            preview_id: value.preview_id.get(),
+            content: LyricsContent::from(&value.content),
         }
     }
 }

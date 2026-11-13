@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use crate::collection::{CoverAnimationInBackground, Playlist, PlaylistId, PlaylistKind, Song};
 use crate::player::metadata::{CoverArt, TrackMetadata};
+
+use super::lyrics::{EffectiveLyrics, LyricsSessionSnapshot};
 use crate::player::{
     PlaybackMode, PlaybackState, PlayerSnapshot as DomainPlayerSnapshot, QueuePosition,
 };
@@ -64,6 +66,11 @@ pub(crate) struct PlayerView {
     pub session_position_ms: u64,
     pub display_title: Option<String>,
     pub active_lyrics_line: Option<u64>,
+    /// Active lyrics search/preview session. `None` when no session is open.
+    pub lyrics_session: Option<Arc<LyricsSessionSnapshot>>,
+    /// Preview body to render when the session target is the current track.
+    /// `None` means the UI should keep using official `metadata.lyrics`.
+    pub effective_lyrics: Option<Arc<EffectiveLyrics>>,
     pub source_playlist_id: Option<PlaylistId>,
     pub queue: Vec<QueueItemView>,
     pub up_next: Vec<QueueItemView>,
@@ -86,6 +93,8 @@ impl PlayerView {
             && self.queue == previous.queue
             && self.up_next == previous.up_next
             && self.metadata_ptr_eq(previous)
+            && self.lyrics_session_ptr_eq(previous)
+            && self.effective_lyrics_ptr_eq(previous)
             && (self.position_ms != previous.position_ms
                 || self.active_lyrics_line != previous.active_lyrics_line
                 || self.session_position_ms != previous.session_position_ms)
@@ -93,6 +102,22 @@ impl PlayerView {
 
     fn metadata_ptr_eq(&self, other: &Self) -> bool {
         match (&self.metadata, &other.metadata) {
+            (None, None) => true,
+            (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+            _ => false,
+        }
+    }
+
+    fn lyrics_session_ptr_eq(&self, other: &Self) -> bool {
+        match (&self.lyrics_session, &other.lyrics_session) {
+            (None, None) => true,
+            (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+            _ => false,
+        }
+    }
+
+    fn effective_lyrics_ptr_eq(&self, other: &Self) -> bool {
+        match (&self.effective_lyrics, &other.effective_lyrics) {
             (None, None) => true,
             (Some(left), Some(right)) => Arc::ptr_eq(left, right),
             _ => false,
@@ -115,6 +140,8 @@ impl PlayerView {
             session_position_ms: self.session_position_ms,
             display_title: self.display_title.clone(),
             active_lyrics_line: self.active_lyrics_line,
+            lyrics_session: self.lyrics_session.clone(),
+            effective_lyrics: self.effective_lyrics.clone(),
             source_playlist_id: self.source_playlist_id,
             queue: Vec::new(),
             up_next: Vec::new(),
@@ -194,6 +221,8 @@ impl PlayerView {
             session_position_ms,
             display_title,
             active_lyrics_line,
+            lyrics_session: None,
+            effective_lyrics: None,
             source_playlist_id,
             queue: QueueItemView::from_paths(snapshot.queue.main_paths),
             up_next: QueueItemView::from_paths(snapshot.queue.up_next_paths),
@@ -330,6 +359,8 @@ mod tests {
             session_position_ms: 1000,
             display_title: Some("t".into()),
             active_lyrics_line: None,
+            lyrics_session: None,
+            effective_lyrics: None,
             source_playlist_id: None,
             queue: vec![QueueItemView {
                 index: 0,

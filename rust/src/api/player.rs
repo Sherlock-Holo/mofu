@@ -338,6 +338,11 @@ pub struct PlayerSnapshot {
     pub display_title: Option<String>,
     /// Active timed lyric line index for `position_ms`, when available.
     pub active_lyrics_line: Option<u64>,
+    /// Active lyrics search/preview session. `None` when no session is open.
+    pub lyrics_session: Option<LyricsSessionSnapshot>,
+    /// Preview body to render when the session target is the current track.
+    /// `None` means the UI should keep using official `metadata.lyrics`.
+    pub effective_lyrics: Option<EffectiveLyrics>,
     /// Playlist that sourced the current main queue, when known.
     pub source_playlist_id: Option<u64>,
     /// Main queue in play order (shuffled when `playback_mode` is shuffle).
@@ -475,6 +480,8 @@ impl From<DomainPlayerSnapshot> for PlayerSnapshot {
             current_path,
             display_title,
             active_lyrics_line,
+            lyrics_session: None,
+            effective_lyrics: None,
             source_playlist_id: None,
             queue: QueueItem::list_from(queue.main_paths),
             up_next: QueueItem::list_from(queue.up_next_paths),
@@ -484,4 +491,44 @@ impl From<DomainPlayerSnapshot> for PlayerSnapshot {
                 .map(|meta| TrackMetadata::from(meta.as_ref())),
         }
     }
+}
+
+/// Session status for a lyrics search shown in the candidate panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LyricsSearchStatus {
+    Searching,
+    Ready,
+    NoResults,
+    Failed,
+}
+
+/// One lyrics candidate row. The lyric body stays in the Rust session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LyricsCandidateSnapshot {
+    pub id: u64,
+    pub provider: String,
+    pub provider_label: String,
+    pub title: String,
+    pub artist: String,
+    pub duration_ms: Option<u64>,
+    pub synced: bool,
+    pub instrumental: Option<bool>,
+}
+
+/// Active lyrics search/preview session for Flutter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LyricsSessionSnapshot {
+    pub session_id: u64,
+    pub target_path: String,
+    pub status: LyricsSearchStatus,
+    pub candidates: Vec<LyricsCandidateSnapshot>,
+    pub preview_id: Option<u64>,
+    pub error_message: Option<String>,
+}
+
+/// Preview lyrics the UI should render instead of official `metadata.lyrics`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectiveLyrics {
+    pub preview_id: u64,
+    pub content: LyricsContent,
 }

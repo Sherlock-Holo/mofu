@@ -110,7 +110,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BootstrapSnapshot dco_decode_bootstrap_snapshot(dynamic raw);
 
   @protected
+  bool dco_decode_box_autoadd_bool(dynamic raw);
+
+  @protected
   CoverArt dco_decode_box_autoadd_cover_art(dynamic raw);
+
+  @protected
+  EffectiveLyrics dco_decode_box_autoadd_effective_lyrics(dynamic raw);
+
+  @protected
+  LyricsSessionSnapshot dco_decode_box_autoadd_lyrics_session_snapshot(
+    dynamic raw,
+  );
 
   @protected
   PlaybackSession dco_decode_box_autoadd_playback_session(dynamic raw);
@@ -133,6 +144,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoverArt dco_decode_cover_art(dynamic raw);
 
   @protected
+  EffectiveLyrics dco_decode_effective_lyrics(dynamic raw);
+
+  @protected
   double dco_decode_f_64(dynamic raw);
 
   @protected
@@ -149,6 +163,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Lyrics> dco_decode_list_lyrics(dynamic raw);
+
+  @protected
+  List<LyricsCandidateSnapshot> dco_decode_list_lyrics_candidate_snapshot(
+    dynamic raw,
+  );
 
   @protected
   List<LyricsLine> dco_decode_list_lyrics_line(dynamic raw);
@@ -172,6 +191,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Lyrics dco_decode_lyrics(dynamic raw);
 
   @protected
+  LyricsCandidateSnapshot dco_decode_lyrics_candidate_snapshot(dynamic raw);
+
+  @protected
+  LyricsConfirmAction dco_decode_lyrics_confirm_action(dynamic raw);
+
+  @protected
+  LyricsConfirmResult dco_decode_lyrics_confirm_result(dynamic raw);
+
+  @protected
+  LyricsConfirmResultKind dco_decode_lyrics_confirm_result_kind(dynamic raw);
+
+  @protected
   LyricsContent dco_decode_lyrics_content(dynamic raw);
 
   @protected
@@ -181,13 +212,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LyricsLine dco_decode_lyrics_line(dynamic raw);
 
   @protected
+  LyricsSearchStatus dco_decode_lyrics_search_status(dynamic raw);
+
+  @protected
+  LyricsSessionSnapshot dco_decode_lyrics_session_snapshot(dynamic raw);
+
+  @protected
   LyricsSource dco_decode_lyrics_source(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
   CoverArt? dco_decode_opt_box_autoadd_cover_art(dynamic raw);
+
+  @protected
+  EffectiveLyrics? dco_decode_opt_box_autoadd_effective_lyrics(dynamic raw);
+
+  @protected
+  LyricsSessionSnapshot? dco_decode_opt_box_autoadd_lyrics_session_snapshot(
+    dynamic raw,
+  );
 
   @protected
   PlaybackSession? dco_decode_opt_box_autoadd_playback_session(dynamic raw);
@@ -338,7 +386,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BootstrapSnapshot sse_decode_bootstrap_snapshot(SseDeserializer deserializer);
 
   @protected
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
   CoverArt sse_decode_box_autoadd_cover_art(SseDeserializer deserializer);
+
+  @protected
+  EffectiveLyrics sse_decode_box_autoadd_effective_lyrics(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LyricsSessionSnapshot sse_decode_box_autoadd_lyrics_session_snapshot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PlaybackSession sse_decode_box_autoadd_playback_session(
@@ -365,6 +426,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoverArt sse_decode_cover_art(SseDeserializer deserializer);
 
   @protected
+  EffectiveLyrics sse_decode_effective_lyrics(SseDeserializer deserializer);
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
@@ -381,6 +445,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Lyrics> sse_decode_list_lyrics(SseDeserializer deserializer);
+
+  @protected
+  List<LyricsCandidateSnapshot> sse_decode_list_lyrics_candidate_snapshot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<LyricsLine> sse_decode_list_lyrics_line(SseDeserializer deserializer);
@@ -404,6 +473,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Lyrics sse_decode_lyrics(SseDeserializer deserializer);
 
   @protected
+  LyricsCandidateSnapshot sse_decode_lyrics_candidate_snapshot(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LyricsConfirmAction sse_decode_lyrics_confirm_action(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LyricsConfirmResult sse_decode_lyrics_confirm_result(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LyricsConfirmResultKind sse_decode_lyrics_confirm_result_kind(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   LyricsContent sse_decode_lyrics_content(SseDeserializer deserializer);
 
   @protected
@@ -415,13 +504,36 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LyricsLine sse_decode_lyrics_line(SseDeserializer deserializer);
 
   @protected
+  LyricsSearchStatus sse_decode_lyrics_search_status(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LyricsSessionSnapshot sse_decode_lyrics_session_snapshot(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   LyricsSource sse_decode_lyrics_source(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
   CoverArt? sse_decode_opt_box_autoadd_cover_art(SseDeserializer deserializer);
+
+  @protected
+  EffectiveLyrics? sse_decode_opt_box_autoadd_effective_lyrics(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LyricsSessionSnapshot? sse_decode_opt_box_autoadd_lyrics_session_snapshot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PlaybackSession? sse_decode_opt_box_autoadd_playback_session(
@@ -597,8 +709,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_cover_art(
     CoverArt self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_effective_lyrics(
+    EffectiveLyrics self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_lyrics_session_snapshot(
+    LyricsSessionSnapshot self,
     SseSerializer serializer,
   );
 
@@ -630,6 +757,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_cover_art(CoverArt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_effective_lyrics(
+    EffectiveLyrics self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
@@ -649,6 +782,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_lyrics(List<Lyrics> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_lyrics_candidate_snapshot(
+    List<LyricsCandidateSnapshot> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_lyrics_line(
@@ -684,6 +823,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_lyrics(Lyrics self, SseSerializer serializer);
 
   @protected
+  void sse_encode_lyrics_candidate_snapshot(
+    LyricsCandidateSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lyrics_confirm_action(
+    LyricsConfirmAction self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lyrics_confirm_result(
+    LyricsConfirmResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lyrics_confirm_result_kind(
+    LyricsConfirmResultKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_lyrics_content(LyricsContent self, SseSerializer serializer);
 
   @protected
@@ -696,14 +859,41 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_lyrics_line(LyricsLine self, SseSerializer serializer);
 
   @protected
+  void sse_encode_lyrics_search_status(
+    LyricsSearchStatus self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lyrics_session_snapshot(
+    LyricsSessionSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_lyrics_source(LyricsSource self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_box_autoadd_cover_art(
     CoverArt? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_effective_lyrics(
+    EffectiveLyrics? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_lyrics_session_snapshot(
+    LyricsSessionSnapshot? self,
     SseSerializer serializer,
   );
 
