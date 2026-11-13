@@ -249,4 +249,20 @@ mod tests {
             Err(PlayerError::CommandChannelClosed)
         ));
     }
+    #[test]
+    fn restore_style_queue_then_seek_at_flac_end_keeps_queue() {
+        let player = Player::new();
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tone.flac");
+        player
+            .set_queue(vec![path.clone()], Some(0), false)
+            .unwrap();
+        let duration = player.duration();
+        assert!(duration > Duration::from_secs(1));
+        player.seek(duration).unwrap();
+        assert_eq!(player.position(), duration);
+        assert_eq!(player.full_snapshot().queue.current_path(), Some(&path));
+        assert!(!player.state().is_playing());
+        player.seek(Duration::from_millis(500)).unwrap();
+        assert_eq!(player.position(), Duration::from_millis(500));
+    }
 }

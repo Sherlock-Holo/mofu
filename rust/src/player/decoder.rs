@@ -73,6 +73,7 @@ pub(crate) struct DecoderSession {
     time_base: Option<TimeBase>,
     pcm_format: AudioFormat,
     discard_until: Option<Timestamp>,
+    at_end: bool,
     duration_ms: u64,
     metadata: TrackMetadata,
     interleaved: Vec<f32>,
@@ -145,6 +146,7 @@ impl DecoderSession {
                 channels,
             },
             discard_until: None,
+            at_end: false,
             duration_ms,
             metadata,
             interleaved: Vec::new(),
@@ -171,6 +173,15 @@ impl DecoderSession {
             target_ms.min(self.duration_ms)
         };
 
+        // Container seek APIs address samples, not the boundary after the last
+        // sample. Seeking exactly to duration is a valid logical EOF position.
+        if self.duration_ms > 0 && clamped_ms == self.duration_ms {
+            self.decoder.reset();
+            self.discard_until = None;
+            self.at_end = true;
+            return Ok(clamped_ms);
+        }
+
         let time =
             Time::try_from_secs_f64(clamped_ms as f64 / 1000.0).ok_or(PlayerError::InvalidSeek)?;
 
@@ -186,12 +197,16 @@ impl DecoderSession {
             .map_err(PlayerError::from)?;
 
         self.decoder.reset();
+        self.at_end = false;
         self.discard_until = Some(seeked.required_ts);
         Ok(clamped_ms)
     }
 
     /// Decode one packet worth of interleaved f32 samples, applying seek trim when needed.
     pub(crate) fn decode_next_packet(&mut self) -> Result<DecodePacket, PlayerError> {
+        if self.at_end {
+            return Ok(DecodePacket::Ended);
+        }
         loop {
             // Some containers signal EOF via Io UnexpectedEof instead of Ok(None).
             let packet = match self.format.next_packet() {
@@ -514,6 +529,70 @@ mod tests {
                 assert!((450..=600).contains(&position_ms));
             }
             DecodePacket::Ended => panic!("unexpected end after seek"),
+        }
+    }
+
+    #[test]
+    #[ignore = "requires MOFU_SEEK_FIXTURE audio path"]
+    fn seek_external_fixture_matrix() {
+        let path = std::env::var_os("MOFU_SEEK_FIXTURE").expect("fixture path");
+        let path = PathBuf::from(path);
+        let duration = DecoderSession::open(&path).unwrap().duration_ms();
+        for warm in [false, true] {
+            for position in [
+                0,
+                1,
+                1_000,
+                60_000,
+                duration.saturating_sub(1_000),
+                duration.saturating_sub(1),
+                duration,
+            ] {
+                let mut session = DecoderSession::open(&path).unwrap();
+                if warm {
+                    let _ = session.decode_next_packet().unwrap();
+                }
+                let result = session.seek(Duration::from_millis(position));
+                assert!(result.is_ok(), "warm={warm} target={position}: {result:?}");
+                println!("warm={warm} duration={duration} target={position} result={result:?}");
+                if result.is_ok() {
+                    match session.decode_next_packet() {
+                        Ok(DecodePacket::Samples { position_ms, .. }) => {
+                            println!("decoded at {position_ms}")
+                        }
+                        Ok(DecodePacket::Ended) => println!("ended"),
+                        Err(err) => panic!("warm={warm} target={position}: {err:?}"),
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn flac_seek_to_end_is_logical_eof_and_can_seek_back() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tone.flac");
+        for warm in [false, true] {
+            let mut session = DecoderSession::open(&path).unwrap();
+            if warm {
+                let _ = session.decode_next_packet().unwrap();
+            }
+            let duration = session.duration_ms();
+            assert!(duration > 1_000);
+            for target in [duration, duration + 5_000] {
+                assert_eq!(
+                    session.seek(Duration::from_millis(target)).unwrap(),
+                    duration
+                );
+                assert!(matches!(
+                    session.decode_next_packet().unwrap(),
+                    DecodePacket::Ended
+                ));
+            }
+            assert_eq!(session.seek(Duration::from_millis(500)).unwrap(), 500);
+            assert!(matches!(
+                session.decode_next_packet().unwrap(),
+                DecodePacket::Samples { .. }
+            ));
         }
     }
 }
