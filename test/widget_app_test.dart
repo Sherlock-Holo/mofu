@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mofu/app/app.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
+import 'package:mofu/features/lyrics/lyrics_session_panel.dart';
 import 'package:mofu/features/now_playing/now_playing_page.dart';
 import 'package:mofu/features/now_playing/widgets/lyrics_panel.dart';
 import 'package:mofu/features/now_playing/widgets/rotating_cover.dart';
@@ -110,9 +111,16 @@ PlayerSnapshot _playingSnapshot({
   PlaybackMode mode = PlaybackMode.sequential,
   PlayerState state = PlayerState.playing,
   CoverArt? cover,
+  PlayerSnapshotKind kind = PlayerSnapshotKind.full,
+  LyricsSessionSnapshot? lyricsSession,
+  EffectiveLyrics? effectiveLyrics,
+  List<Lyrics>? lyrics,
+  String currentPath = '/music/a.mp3',
+  String displayTitle = '草莓糖',
+  BigInt? activeLyricsLine,
 }) {
   return PlayerSnapshot(
-    kind: PlayerSnapshotKind.full,
+    kind: kind,
     positionMs: positionMs ?? BigInt.from(2500),
     durationMs: BigInt.from(180000),
     state: state,
@@ -120,9 +128,11 @@ PlayerSnapshot _playingSnapshot({
     playbackMode: mode,
     currentIndex: BigInt.zero,
     currentFromUpNext: false,
-    currentPath: '/music/a.mp3',
-    displayTitle: '草莓糖',
-    activeLyricsLine: BigInt.one,
+    currentPath: currentPath,
+    displayTitle: displayTitle,
+    activeLyricsLine: activeLyricsLine ?? BigInt.one,
+    lyricsSession: lyricsSession,
+    effectiveLyrics: effectiveLyrics,
     sourcePlaylistId: BigInt.one,
     queue: [
       QueueItem(index: BigInt.zero, path: '/music/a.mp3'),
@@ -130,11 +140,62 @@ PlayerSnapshot _playingSnapshot({
     ],
     upNext: const [],
     metadata: _meta(
-      title: '草莓糖',
+      title: displayTitle,
       artist: '奶油乐队',
       album: '甜点',
       cover: cover,
-      lyrics: _timedLyrics(),
+      lyrics: lyrics ?? _timedLyrics(),
+    ),
+  );
+}
+
+LyricsSessionSnapshot _lyricsSession({
+  LyricsSearchStatus status = LyricsSearchStatus.ready,
+  String targetPath = '/music/a.mp3',
+  BigInt? previewId,
+  String? errorMessage,
+  List<LyricsCandidateSnapshot>? candidates,
+}) {
+  return LyricsSessionSnapshot(
+    sessionId: BigInt.one,
+    targetPath: targetPath,
+    status: status,
+    previewId: previewId,
+    errorMessage: errorMessage,
+    candidates:
+        candidates ??
+        [
+          LyricsCandidateSnapshot(
+            id: BigInt.one,
+            provider: 'lrclib',
+            providerLabel: 'lrclib',
+            title: '候选一',
+            artist: '奶油乐队',
+            durationMs: BigInt.from(180000),
+            synced: true,
+          ),
+          LyricsCandidateSnapshot(
+            id: BigInt.two,
+            provider: 'megalobiz',
+            providerLabel: 'megalobiz',
+            title: '候选二',
+            artist: '奶油乐队',
+            durationMs: BigInt.from(181000),
+            synced: true,
+          ),
+        ],
+  );
+}
+
+EffectiveLyrics _previewEffective() {
+  return EffectiveLyrics(
+    previewId: BigInt.one,
+    content: LyricsContent(
+      kind: LyricsContentKind.timed,
+      lines: [
+        LyricsLine(startMs: BigInt.zero, text: '预览第一句'),
+        LyricsLine(startMs: BigInt.from(2000), text: '预览第二句'),
+      ],
     ),
   );
 }
@@ -628,6 +689,29 @@ void main() {
 
       expect(identical(player.metadata?.cover, next), isTrue);
     });
+
+    test('progress tick retains lyrics session and effective lyrics', () {
+      final session = _lyricsSession(previewId: BigInt.one);
+      final effective = _previewEffective();
+      final player = PlayerController.fake(
+        snapshot: _playingSnapshot(
+          lyricsSession: session,
+          effectiveLyrics: effective,
+        ),
+      );
+
+      player.emitSnapshot(
+        _playingSnapshot(
+          kind: PlayerSnapshotKind.progress,
+          positionMs: BigInt.from(2600),
+          lyricsSession: _lyricsSession(previewId: BigInt.one),
+          effectiveLyrics: _previewEffective(),
+        ),
+      );
+
+      expect(identical(player.lyricsSession, session), isTrue);
+      expect(identical(player.effectiveLyrics, effective), isTrue);
+    });
   });
 
   group('LyricsPanel', () {
@@ -925,6 +1009,189 @@ void main() {
       final paused = _coverTurns(tester);
       await tester.pump(const Duration(seconds: 2));
       expect(_coverTurns(tester), paused);
+    });
+  });
+
+  group('lyrics download entries', () {
+    testWidgets('now playing keeps a top entry and an empty-state button', (
+      tester,
+    ) async {
+      final withLyrics = PlayerController.fake(snapshot: _playingSnapshot());
+      await _pumpNowPlaying(tester, player: withLyrics);
+      expect(find.text('下载歌词'), findsOneWidget);
+
+      final empty = PlayerController.fake(
+        snapshot: _playingSnapshot(lyrics: const []),
+      );
+      await _pumpNowPlaying(tester, player: empty);
+      expect(find.text('暂无歌词'), findsOneWidget);
+      expect(find.text('下载歌词'), findsNWidgets(2));
+
+      await tester.tap(find.text('下载歌词').first);
+      await tester.pump();
+      expect(empty.recordedCommands, contains('lyricsSearch:/music/a.mp3'));
+    });
+
+    testWidgets('song list context menu downloads without playing', (
+      tester,
+    ) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+      await _pumpApp(tester, collection: collection, player: player);
+
+      await tester.tap(find.text('奶油云'), buttons: kSecondaryMouseButton);
+      await tester.pumpAndSettle();
+      expect(find.text('下载歌词'), findsOneWidget);
+      await tester.tap(find.text('下载歌词'));
+      await tester.pump();
+
+      expect(player.recordedCommands, contains('lyricsSearch:/music/b.mp3'));
+      expect(
+        player.recordedCommands.where((c) => c.startsWith('playPlaylist')),
+        isEmpty,
+      );
+    });
+
+    testWidgets('song list hover icon is an independent hit target', (
+      tester,
+    ) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(snapshot: _playingSnapshot());
+      await _pumpApp(tester, collection: collection, player: player);
+
+      final hover = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        hover.hover(tester.getCenter(find.text('奶油云'))),
+      );
+      await tester.pumpAndSettle();
+
+      final icon = find.byKey(const ValueKey('download-lyrics-/music/b.mp3'));
+      expect(icon, findsOneWidget);
+      final iconCenter = tester.getCenter(icon);
+      await tester.sendEventToBinding(hover.hover(iconCenter));
+      await tester.pump();
+      await tester.sendEventToBinding(hover.down(iconCenter));
+      await tester.pump();
+      await tester.sendEventToBinding(hover.up());
+      await tester.pump();
+
+      expect(player.recordedCommands, contains('lyricsSearch:/music/b.mp3'));
+      expect(
+        player.recordedCommands.where((c) => c.startsWith('playPlaylist')),
+        isEmpty,
+      );
+    });
+  });
+
+  group('lyrics candidate panel', () {
+    testWidgets('previews, cancels, and saves from the non-modal panel', (
+      tester,
+    ) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(
+        snapshot: _playingSnapshot(lyricsSession: _lyricsSession()),
+      );
+      await _pumpApp(tester, collection: collection, player: player);
+
+      final bar = tester.getRect(find.byType(PlaybackBar));
+      final panel = tester.getRect(find.byType(LyricsSessionPanel));
+      expect(panel.bottom, lessThanOrEqualTo(bar.top + 0.5));
+
+      await tester.tap(find.text('候选二'));
+      await tester.pump();
+      expect(player.recordedCommands, contains('lyricsPreview:1:2'));
+
+      await tester.tap(find.text('全部丢弃'));
+      await tester.pump();
+      expect(player.recordedCommands, contains('lyricsCancel:1'));
+    });
+
+    testWidgets('save asks to replace an existing sidecar', (tester) async {
+      final collection = CollectionController.fake(
+        playlists: [_directoryPlaylist()],
+        selectedId: BigInt.one,
+      );
+      final player = PlayerController.fake(
+        snapshot: _playingSnapshot(
+          lyricsSession: _lyricsSession(previewId: BigInt.one),
+        ),
+      );
+      player.stubLyricsConfirmResult(
+        const LyricsConfirmResult(
+          kind: LyricsConfirmResultKind.needsReplace,
+          audioPath: '/music/a.mp3',
+          sidecarPath: '/music/a.lrc',
+          conflictingAudio: [],
+        ),
+      );
+      await _pumpApp(tester, collection: collection, player: player);
+
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      expect(player.recordedCommands, contains('lyricsConfirm:1:1:save'));
+      expect(find.text('已有同名歌词文件，确认替换？'), findsOneWidget);
+
+      await tester.tap(find.text('确认替换'));
+      await tester.pump();
+      expect(
+        player.recordedCommands,
+        contains('lyricsConfirm:1:1:replaceExistingSidecar'),
+      );
+    });
+
+    testWidgets(
+      'non-current search offers play-and-preview instead of autoplay',
+      (tester) async {
+        final collection = CollectionController.fake(
+          playlists: [_directoryPlaylist()],
+          selectedId: BigInt.one,
+        );
+        final player = PlayerController.fake(
+          snapshot: _playingSnapshot(
+            lyricsSession: _lyricsSession(
+              targetPath: '/music/b.mp3',
+              previewId: BigInt.one,
+            ),
+          ),
+        );
+        await _pumpApp(tester, collection: collection, player: player);
+
+        expect(find.textContaining('播放并预览'), findsWidgets);
+        expect(
+          player.recordedCommands.where((c) => c.startsWith('playPlaylist')),
+          isEmpty,
+        );
+        await tester.tap(find.text('播放并预览'));
+        await tester.pump();
+        expect(
+          player.recordedCommands,
+          contains('lyricsPlayAndPreview:1:/music/b.mp3'),
+        );
+      },
+    );
+
+    testWidgets('now playing renders rust effective lyrics during preview', (
+      tester,
+    ) async {
+      final player = PlayerController.fake(
+        snapshot: _playingSnapshot(
+          lyricsSession: _lyricsSession(previewId: BigInt.one),
+          effectiveLyrics: _previewEffective(),
+          activeLyricsLine: BigInt.zero,
+        ),
+      );
+      await _pumpNowPlaying(tester, player: player);
+      expect(find.text('预览第一句'), findsOneWidget);
+      expect(find.text('第一行歌词'), findsNothing);
     });
   });
 }

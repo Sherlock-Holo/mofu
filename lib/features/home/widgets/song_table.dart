@@ -86,6 +86,9 @@ class SongTable extends StatelessWidget {
           );
         },
         onEnqueueNext: () => player.enqueueNext(song.path),
+        onDownloadLyrics: () {
+          unawaited(player.lyricsSearch(song.path));
+        },
         onOpenNowPlaying: () {
           if (!playing) {
             unawaited(
@@ -189,7 +192,7 @@ class _TableHeader extends StatelessWidget {
   }
 }
 
-class _SongRow extends StatelessWidget {
+class _SongRow extends StatefulWidget {
   const _SongRow({
     super.key,
     required this.index,
@@ -197,6 +200,7 @@ class _SongRow extends StatelessWidget {
     required this.playing,
     required this.onPlay,
     required this.onEnqueueNext,
+    required this.onDownloadLyrics,
     required this.onOpenNowPlaying,
   });
 
@@ -205,92 +209,130 @@ class _SongRow extends StatelessWidget {
   final bool playing;
   final VoidCallback onPlay;
   final VoidCallback onEnqueueNext;
+  final VoidCallback onDownloadLyrics;
   final VoidCallback onOpenNowPlaying;
 
   @override
+  State<_SongRow> createState() => _SongRowState();
+}
+
+class _SongRowState extends State<_SongRow> {
+  var _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final meta = song.metadata;
-    final title = song.displayTitle;
+    final meta = widget.song.metadata;
+    final title = widget.song.displayTitle;
     final album = meta.album?.trim().isNotEmpty == true ? meta.album! : '—';
     final artist = meta.artist?.trim().isNotEmpty == true ? meta.artist! : '—';
 
-    return Material(
-      color: playing
-          ? StrawberryCream.strawberry.withValues(alpha: 0.12)
-          : Colors.transparent,
-      borderRadius: BorderRadius.circular(StrawberryCream.radiusSm),
-      child: InkWell(
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
+        color: widget.playing
+            ? StrawberryCream.strawberry.withValues(alpha: 0.12)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(StrawberryCream.radiusSm),
-        onTap: onPlay,
-        onDoubleTap: onOpenNowPlaying,
-        onSecondaryTapDown: (details) =>
-            _showContextMenu(context, details.globalPosition),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 36,
-                child: playing
-                    ? const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Icon(
-                          Icons.graphic_eq_rounded,
-                          size: 18,
-                          color: StrawberryCream.strawberry,
-                        ),
-                      )
-                    : Text(
-                        '${index + 1}',
-                        style: Theme.of(context).textTheme.bodyMedium,
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(StrawberryCream.radiusSm),
+                onTap: widget.onPlay,
+                onDoubleTap: widget.onOpenNowPlaying,
+                onSecondaryTapDown: (details) =>
+                    _showContextMenu(context, details.globalPosition),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 36,
+                        child: widget.playing
+                            ? const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.graphic_eq_rounded,
+                                  size: 18,
+                                  color: StrawberryCream.strawberry,
+                                ),
+                              )
+                            : Text(
+                                '${widget.index + 1}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
                       ),
-              ),
-              GestureDetector(
-                onTap: onOpenNowPlaying,
-                child: CoverView(cover: meta.cover, size: 40),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: playing
-                        ? StrawberryCream.strawberry
-                        : StrawberryCream.wine,
+                      GestureDetector(
+                        onTap: widget.onOpenNowPlaying,
+                        child: CoverView(cover: meta.cover, size: 40),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: widget.playing
+                                    ? StrawberryCream.strawberry
+                                    : StrawberryCream.wine,
+                              ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          album,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  album,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (_hovered)
+              IconButton(
+                key: ValueKey('download-lyrics-${widget.song.path}'),
+                tooltip: '下载歌词',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
                 ),
+                icon: const Icon(Icons.lyrics_outlined, size: 18),
+                onPressed: widget.onDownloadLyrics,
               ),
-              Expanded(
-                flex: 2,
+            SizedBox(
+              width: 64,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
                 child: Text(
-                  artist,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ),
-              SizedBox(
-                width: 64,
-                child: Text(
-                  DurationFormat.fromMs(song.durationMs),
+                  DurationFormat.fromMs(widget.song.durationMs),
                   textAlign: TextAlign.end,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -300,7 +342,7 @@ class _SongRow extends StatelessWidget {
   Future<void> _showContextMenu(BuildContext context, Offset position) async {
     final overlay =
         Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final playNext = await showMenu<bool>(
+    final action = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx,
@@ -308,10 +350,15 @@ class _SongRow extends StatelessWidget {
         overlay.size.width - position.dx,
         overlay.size.height - position.dy,
       ),
-      items: const [PopupMenuItem(value: true, child: Text('下一首播放'))],
+      items: const [
+        PopupMenuItem(value: 'next', child: Text('下一首播放')),
+        PopupMenuItem(value: 'lyrics', child: Text('下载歌词')),
+      ],
     );
-    if (playNext == true) {
-      onEnqueueNext();
+    if (action == 'next') {
+      widget.onEnqueueNext();
+    } else if (action == 'lyrics') {
+      widget.onDownloadLyrics();
     }
   }
 }

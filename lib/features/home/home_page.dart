@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mofu/app/theme.dart';
 import 'package:mofu/collection/collection_controller.dart';
 import 'package:mofu/features/home/widgets/current_track_header.dart';
+import 'package:mofu/features/lyrics/lyrics_session_panel.dart';
 import 'package:mofu/features/home/widgets/playlist_sidebar.dart';
 import 'package:mofu/features/home/widgets/song_table.dart';
 import 'package:mofu/player/player_controller.dart';
@@ -99,7 +100,12 @@ class HomePage extends StatelessWidget {
               backgroundColor: Theme.of(context).colorScheme.surface,
               child: const SafeArea(child: PlaylistSidebar()),
             ),
-      body: body,
+      body: Column(
+        children: [
+          Expanded(child: body),
+          const LyricsSessionPanel(),
+        ],
+      ),
       bottomNavigationBar: const PlaybackBar(),
     );
   }

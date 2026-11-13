@@ -9,6 +9,7 @@ class LyricsPanel extends StatefulWidget {
     required this.lyrics,
     this.positionMs,
     this.activeLineHint,
+    this.onDownloadLyrics,
   });
 
   final List<Lyrics> lyrics;
@@ -18,6 +19,9 @@ class LyricsPanel extends StatefulWidget {
 
   /// Prefers the Rust-computed active line so the host can skip position ticks.
   final BigInt? activeLineHint;
+
+  /// Empty-state entry to start a lyrics search. Omitted when null.
+  final VoidCallback? onDownloadLyrics;
 
   @override
   State<LyricsPanel> createState() => _LyricsPanelState();
@@ -115,7 +119,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
   Widget build(BuildContext context) {
     final primary = _primary;
     if (primary == null) {
-      return const _EmptyLyrics();
+      return _EmptyLyrics(onDownloadLyrics: widget.onDownloadLyrics);
     }
 
     final timed = _timedLines;
@@ -174,7 +178,9 @@ class _LyricsPanelState extends State<LyricsPanel> {
 }
 
 class _EmptyLyrics extends StatelessWidget {
-  const _EmptyLyrics();
+  const _EmptyLyrics({this.onDownloadLyrics});
+
+  final VoidCallback? onDownloadLyrics;
 
   @override
   Widget build(BuildContext context) {
@@ -199,6 +205,10 @@ class _EmptyLyrics extends StatelessWidget {
             '内嵌 LRC 或同名 .lrc 会在这里同步显示',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
+          if (onDownloadLyrics != null) ...[
+            const SizedBox(height: 16),
+            TextButton(onPressed: onDownloadLyrics, child: const Text('下载歌词')),
+          ],
         ],
       ),
     );

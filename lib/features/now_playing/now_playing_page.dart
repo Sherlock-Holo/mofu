@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mofu/app/theme.dart';
+import 'package:mofu/features/lyrics/lyrics_session_panel.dart';
 import 'package:mofu/features/now_playing/widgets/lyrics_panel.dart';
 import 'package:mofu/features/now_playing/widgets/rotating_cover.dart';
 import 'package:mofu/player/player_controller.dart';
@@ -189,23 +191,51 @@ class _LyricsHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 歌词列表身份随 full metadata 到达而变；activeLine 驱动高亮。
-    final cursor = context.select<PlayerController, (String?, int, BigInt?)>((
-      player,
-    ) {
-      return (
-        player.currentPath,
-        identityHashCode(player.metadata?.lyrics),
-        player.activeLyricsLine,
-      );
-    });
-    final lyrics =
-        context.read<PlayerController>().metadata?.lyrics ?? const <Lyrics>[];
+    // 有效词由 Rust 快照给出；progress tick 保留其对象身份，只驱动高亮行。
+    final cursor = context
+        .select<PlayerController, (String?, int, int, BigInt?)>((player) {
+          return (
+            player.currentPath,
+            identityHashCode(player.effectiveLyrics),
+            identityHashCode(player.metadata?.lyrics),
+            player.activeLyricsLine,
+          );
+        });
+    final player = context.read<PlayerController>();
+    final effective = player.effectiveLyrics;
+    final lyrics = effective != null
+        ? <Lyrics>[
+            Lyrics(
+              source: LyricsSource.externalFile,
+              content: effective.content,
+            ),
+          ]
+        : (player.metadata?.lyrics ?? const <Lyrics>[]);
+    final path = cursor.$1;
 
-    return LyricsPanel(
-      key: ValueKey(cursor.$1),
-      lyrics: lyrics,
-      activeLineHint: cursor.$3,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (path != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => unawaited(player.lyricsSearch(path)),
+              child: const Text('下载歌词'),
+            ),
+          ),
+        Expanded(
+          child: LyricsPanel(
+            key: ValueKey(path),
+            lyrics: lyrics,
+            activeLineHint: cursor.$4,
+            onDownloadLyrics: path == null
+                ? null
+                : () => unawaited(player.lyricsSearch(path)),
+          ),
+        ),
+        const LyricsSessionPanel(),
+      ],
     );
   }
 }
